@@ -1,0 +1,19 @@
+{
+  "name": "frontend",
+  "version": "1.0.0",
+  "main": "main.js",
+  "scripts": {
+    "dev": "vite"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@tweenjs/tween.js": "^25.0.0",
+    "three": "^0.181.2"
+  },
+  "devDependencies": {
+    "vite": "^7.2.6"
+  }
+}
