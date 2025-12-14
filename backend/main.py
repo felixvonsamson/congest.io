@@ -5,7 +5,7 @@ from .network import (
     update_network,
     force_directed_layout,
 )
-from .schemas import NetworkState, TopologyChangeRequest
+from .schemas import Network, TopologyChangeRequest
 from fastapi.middleware.cors import CORSMiddleware
 
 
@@ -61,5 +61,23 @@ def reset_network():
 def get_new_layout():
     global network
     network = force_directed_layout(network, k=150.0)
+    state = calculate_power_flow(network)
+    return state
+
+
+@app.get("/switch_node")
+def switch_node(switch_id: str):
+    global network
+    # switch_id has the format "L[from_id]-[to_id]_[from/to]"
+    line_id, direction = (switch_id.split("_")[0], switch_id.split("_")[1])
+    if line_id not in network.lines:
+        return {"error": "Invalid switch ID"}
+    network = update_network(
+        network,
+        TopologyChangeRequest(
+            line_id=line_id,
+            direction=direction,
+        ),
+    )
     state = calculate_power_flow(network)
     return state

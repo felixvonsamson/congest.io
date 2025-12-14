@@ -17,12 +17,11 @@ class Line(BaseModel):
     limit: float = 100.0
 
 
-class NetworkState(BaseModel):
-    nodes: List[Node]
-    lines: List[Line]
+class Network(BaseModel):
+    nodes: dict[str, Node]
+    lines: dict[str, Line]
 
 
 class TopologyChangeRequest(BaseModel):
-    node_id: str
-    action: str  # "split", etc.
-    parameters: Optional[dict] = None
+    line_id: str
+    direction: str  # "to" or "from"

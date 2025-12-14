@@ -1,6 +1,6 @@
 import math
 import random
-from .schemas import NetworkState, TopologyChangeRequest, Node, Line
+from .schemas import Network, TopologyChangeRequest, Node, Line
 import numpy as np
 
 
@@ -54,45 +54,42 @@ def generate_network(num_nodes: int = 20, width: float = 500.0, height: float = 
                     break
 
     # Assign random injections to nodes
-    nodes = []
+    nodes = {}
     raw = []
     for i in range(len(points) - 1):
         raw.append(random.uniform(-100, 100))
     raw.append(-sum(raw))  # ensure total injection is zero
     for i, (x, y) in enumerate(points):
-        nodes.append({"id": str(i), "x": x, "y": y, "injection": raw[i]})
+        nodes[str(i)] = Node(id=str(i), x=x, y=y, injection=raw[i])
 
     # Convert edges
-    lines = []
+    lines = {}
     for u in adjacency:
         for v in adjacency[u]:
             if int(u) < int(v):
-                lines.append(
-                    {
-                        "id": f"L{u}-{v}",
-                        "from_node": str(u),
-                        "to_node": str(v),
-                        "flow": 0.0,
-                        "limit": 100.0,
-                    }
+                lines[f"L{u}-{v}"] = Line(
+                    id=f"L{u}-{v}",
+                    from_node=str(u),
+                    to_node=str(v),
+                    flow=0.0,
+                    limit=50.0,
                 )
 
     # Convert to Pydantic classes
-    node_objects = [Node(**n) for n in nodes]
-    line_objects = [Line(**l) for l in lines]
-    network = reduce_edges({"nodes": node_objects, "lines": line_objects})
+    network = Network(nodes=nodes, lines=lines)
+    network = reduce_edges(network)
     network = force_directed_layout(network, k=150.0)
     return network
 
 
-def reduce_edges(network, factor=0.7, high_degree_node_factor=0.1):
+def reduce_edges(network, factor=0.75, high_degree_node_factor=0.1):
     """
     Reduces the number of edges in the network by the given factor while maintaining connectivity.
     """
-    nodes = network["nodes"]
-    lines = network["lines"]
-    node_degree = {node.id: 0 for node in nodes}
-    for line in lines:
+    nodes = network.nodes
+    lines = network.lines
+    node_degree = {node.id: 0 for node in nodes.values()}
+    for line in lines.values():
         node_degree[line.from_node] += 1
         node_degree[line.to_node] += 1
     # list of highest degree nodes to keep all edges for
@@ -104,8 +101,9 @@ def reduce_edges(network, factor=0.7, high_degree_node_factor=0.1):
     # of the nodes going from highest to lowest degree until we reach the target number of edges or until all other nodes
     # have degree 3. An edge can only be removed if both its nodes have degree > 3.
     target_num_edges = math.floor(len(lines) * factor)
-    random.shuffle(lines)
-    for line in lines:
+    shuffled_lines = list(lines.values())
+    random.shuffle(shuffled_lines)
+    for line in shuffled_lines:
         if len(lines) <= target_num_edges:
             break
         if (
@@ -114,7 +112,7 @@ def reduce_edges(network, factor=0.7, high_degree_node_factor=0.1):
             and node_degree[line.from_node] > 3
             and node_degree[line.to_node] > 3
         ):
-            lines.remove(line)
+            del lines[line.id]
             node_degree[line.from_node] -= 1
             node_degree[line.to_node] -= 1
     return network
@@ -133,17 +131,19 @@ def force_directed_layout(
     Simple force-directed layout algorithm to adjust node positions.
     Nodes repel each other, edges act as springs.
     """
-    nodes = network["nodes"]
-    lines = network["lines"]
-    positions = {node.id: np.array([node.x, node.y], dtype=float) for node in nodes}
-    velocities = {node.id: np.array([0.0, 0.0], dtype=float) for node in nodes}
+    nodes = network.nodes
+    lines = network.lines
+    positions = {
+        node.id: np.array([node.x, node.y], dtype=float) for node in nodes.values()
+    }
+    velocities = {node.id: np.array([0.0, 0.0], dtype=float) for node in nodes.values()}
 
     for _ in range(iterations):
-        forces = {node.id: np.array([0.0, 0.0], dtype=float) for node in nodes}
+        forces = {node.id: np.array([0.0, 0.0], dtype=float) for node in nodes.values()}
 
         # Repulsion
-        for i, node_a in enumerate(nodes):
-            for j, node_b in enumerate(nodes):
+        for i, node_a in nodes.items():
+            for j, node_b in nodes.items():
                 if i != j:
                     delta = positions[node_a.id] - positions[node_b.id]
                     dist = np.linalg.norm(delta) + 1e-6
@@ -151,7 +151,7 @@ def force_directed_layout(
                     forces[node_a.id] += (delta / dist) * force_magnitude
 
         # Spring forces
-        for line in lines:
+        for line in lines.values():
             pos_from = positions[line.from_node]
             pos_to = positions[line.to_node]
             delta = pos_to - pos_from
@@ -162,8 +162,8 @@ def force_directed_layout(
             forces[line.to_node] -= force
 
         # angular springs
-        adjacency = {node.id: [] for node in nodes}
-        for line in lines:
+        adjacency = {node.id: [] for node in nodes.values()}
+        for line in lines.values():
             adjacency[line.from_node].append(line.to_node)
             adjacency[line.to_node].append(line.from_node)
         for node_id in adjacency:
@@ -195,12 +195,12 @@ def force_directed_layout(
                 forces[node_id] -= (perp_1 + perp_2) * torque_magnitude
 
         # Update velocities and positions
-        for node in nodes:
+        for node in nodes.values():
             velocities[node.id] = (velocities[node.id] + forces[node.id]) * damping
             positions[node.id] += velocities[node.id]
 
     # Update node positions
-    for node in nodes:
+    for node in nodes.values():
         node.x, node.y = positions[node.id].tolist()
 
     return network
@@ -217,22 +217,22 @@ def calculate_power_flow(network):
     - compute flows on lines
     """
 
-    nodes = network["nodes"]
-    lines = network["lines"]
+    nodes = network.nodes
+    lines = network.lines
     n = len(nodes)
 
     # --- Map node IDs to indices ---
-    id_to_idx = {node.id: i for i, node in enumerate(nodes)}
+    id_to_idx = {node.id: i for i, node in enumerate(nodes.values())}
 
     # --- Build injection vector p ---
-    p = np.array([node.injection for node in nodes], dtype=float)
+    p = np.array([node.injection for node in nodes.values()], dtype=float)
 
     # --- Build line data ---
     # assume reactance X = 1.0 for now
     m = len(lines)
     A = np.zeros((n, m))  # incidence matrix
 
-    for ell, line in enumerate(lines):
+    for ell, line in enumerate(lines.values()):
         i = id_to_idx[line.from_node]
         j = id_to_idx[line.to_node]
         A[i, ell] = 1
@@ -258,24 +258,91 @@ def calculate_power_flow(network):
     flows = A.T @ theta
 
     # --- Attach flows back to lines ---
-    updated_lines = []
-    for ell, line in enumerate(lines):
-        updated_lines.append(
-            Line(
-                id=line.id,
-                from_node=line.from_node,
-                to_node=line.to_node,
-                flow=float(flows[ell]),
-                limit=line.limit,
-            )
+    updated_lines = {}
+    for ell, line in enumerate(lines.values()):
+        updated_lines[line.id] = Line(
+            id=line.id,
+            from_node=line.from_node,
+            to_node=line.to_node,
+            flow=float(flows[ell]),
+            limit=line.limit,
         )
 
-    return NetworkState(nodes=nodes, lines=updated_lines)
+    return Network(nodes=nodes, lines=updated_lines)
 
 
 def update_network(network, req: TopologyChangeRequest):
     """
-    Placeholder: modify the network topology according to user's action.
-    e.g. split a node, reroute lines, etc.
+    Switch the connection to a second node placed at the same location.
     """
+    if req.direction == "to":
+        target_node_id = req.line_id.split("-")[1]
+        from_node_id = req.line_id.split("-")[0][1:]
+        if "b" in target_node_id:
+            # switching back to original node
+            new_node = network.nodes[target_node_id[:-1]]
+            # delete "b" node if no other lines are connected
+            connected_lines = [
+                line
+                for line in network.lines.values()
+                if line.from_node == target_node_id or line.to_node == target_node_id
+            ]
+            if len(connected_lines) == 1:
+                del network.nodes[target_node_id]
+        else:
+            if not network.nodes.get(target_node_id + "b"):
+                # create a new "b" node
+                new_node = Node(
+                    id=target_node_id + "b",
+                    injection=0.0,
+                    x=network.nodes[target_node_id].x,
+                    y=network.nodes[target_node_id].y,
+                )
+                network.nodes[new_node.id] = new_node
+            else:
+                new_node = network.nodes[target_node_id + "b"]
+        new_line_id = f"{req.line_id.split('-')[0]}-{new_node.id}"
+        network.lines[new_line_id] = Line(
+            id=new_line_id,
+            from_node=from_node_id,
+            to_node=new_node.id,
+            flow=0.0,
+            limit=network.lines[req.line_id].limit,
+        )
+        del network.lines[req.line_id]
+    else:
+        target_node_id = req.line_id.split("-")[0][1:]
+        to_node_id = req.line_id.split("-")[1]
+        if "b" in target_node_id:
+            # switching back to original node
+            new_node = network.nodes[target_node_id[:-1]]
+            # delete "b" node if no other lines are connected
+            connected_lines = [
+                line
+                for line in network.lines.values()
+                if line.from_node == target_node_id or line.to_node == target_node_id
+            ]
+            if len(connected_lines) == 1:
+                del network.nodes[target_node_id]
+        else:
+            if not network.nodes.get(target_node_id + "b"):
+                # create a new "b" node
+                new_node = Node(
+                    id=target_node_id + "b",
+                    injection=0.0,
+                    x=network.nodes[target_node_id].x,
+                    y=network.nodes[target_node_id].y,
+                )
+                network.nodes[new_node.id] = new_node
+            else:
+                new_node = network.nodes[target_node_id + "b"]
+        new_line_id = f"L{new_node.id}-{req.line_id.split('-')[1]}"
+        network.lines[new_line_id] = Line(
+            id=new_line_id,
+            from_node=new_node.id,
+            to_node=to_node_id,
+            flow=0.0,
+            limit=network.lines[req.line_id].limit,
+        )
+        del network.lines[req.line_id]
     return network
