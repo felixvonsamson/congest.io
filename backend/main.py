@@ -5,7 +5,7 @@ from .network import (
     update_network,
     force_directed_layout,
 )
-from .schemas import Network, TopologyChangeRequest
+from .schemas import TopologyChangeRequest
 from fastapi.middleware.cors import CORSMiddleware
 
 
@@ -79,5 +79,28 @@ def switch_node(switch_id: str):
             direction=direction,
         ),
     )
+    state = calculate_power_flow(network)
+    return state
+
+@app.get("/reset_switches")
+def reset_switches(node_id: str):
+    global network
+    for line in list(network.lines.values()):
+        if line.from_node == node_id + "b":
+            network = update_network(
+                network,
+                TopologyChangeRequest(
+                    line_id=line.id,
+                    direction="from",
+                ),
+            )
+        if line.to_node == node_id + "b":
+            network = update_network(
+                network,
+                TopologyChangeRequest(
+                    line_id=line.id,
+                    direction="to",
+                ),
+            )
     state = calculate_power_flow(network)
     return state

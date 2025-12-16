@@ -18,7 +18,7 @@ const mainScene = new THREE.Scene();
 mainScene.background = new THREE.Color(settings.colors.background);
 
 const aspect = 0.5 * window.innerWidth / window.innerHeight;
-const d = 350;  // size of view volume
+const d = 400;  // size of view volume
 
 const overviewCamera = new THREE.OrthographicCamera(
   -d * aspect, d * aspect,   // left, right
@@ -53,7 +53,8 @@ document.getElementById('labelsMain').appendChild(labelRendererMain.domElement);
 
 
 // --- Controls ---
-const controls = new OrbitControls(mainCamera, renderer.domElement);
+const inputEl = document.getElementById('mainInput');
+const controls = new OrbitControls(mainCamera, inputEl);
 controls.enableRotate = false;  // no rotation
 controls.target.set(250, 250, 0);
 controls.update();
@@ -96,7 +97,7 @@ function createNetwork(data) {
       const particleMaterial = new THREE.MeshBasicMaterial({ color: 0xffff00, side: THREE.DoubleSide, depthWrite: false });
       const particle = new THREE.Mesh(particleGeometry, particleMaterial);
       particle.userData = { from: points[0], to: points[1], speed: line.flow / line_length * 2, t: i / n_particles };
-      particles.push(particle);
+      particles.push(particle.userData);
       networkGroup.add(particle);
     }
 
@@ -119,7 +120,6 @@ function createNetwork(data) {
       toggleDiv.dataset.lineNodeID = line.id + "_" + end;
       toggleDiv.addEventListener('click', (event) => {
         const switchID = event.currentTarget.dataset.lineNodeID;
-        console.log('Toggle clicked for line:', switchID);
         if (toggleDiv.style.backgroundColor === 'blue') {
           toggleDiv.style.backgroundColor = 'green';
         } else {
@@ -129,16 +129,7 @@ function createNetwork(data) {
         fetch(`http://127.0.0.1:8000/switch_node?switch_id=${switchID}`)
           .then(response => response.json())
           .then(data => {
-            if (mainNetwork) {
-              mainScene.remove(mainNetwork);
-            }
-            if (overviewNetwork) {
-              overviewScene.remove(overviewNetwork);
-            }
-            mainNetwork = createNetwork(data);
-            overviewNetwork = mainNetwork.clone();
-            overviewScene.add(overviewNetwork);
-            mainScene.add(mainNetwork);
+            update_network(data);
           });
       });
       const toggle = new CSS2DObject(toggleDiv);
@@ -185,6 +176,7 @@ function createNetwork(data) {
         depthWrite: false
       });
       const nodeMesh = new THREE.Mesh(nodeGeom, material);
+      nodeMesh.userData = {id: node.id};
       networkGroup.add(nodeMesh);
 
       // Node injection label using CSS2DObject
@@ -207,10 +199,7 @@ function createNetwork(data) {
 
 // --- Main ---
 fetchNetwork().then(data => {
-  mainNetwork = createNetwork(data);
-  overviewNetwork = mainNetwork.clone();
-  overviewScene.add(overviewNetwork);
-  mainScene.add(mainNetwork);
+  update_network(data);
 });
 
 function animate() {
@@ -219,13 +208,15 @@ function animate() {
 
   // Animate flow particles and update labels
   for (const p of particles) {
-    if (p.userData.t !== undefined) {
-      p.userData.t += p.userData.speed * 0.01;
-      if (p.userData.t > 1) p.userData.t = 0;
-      if (p.userData.t < 0) p.userData.t = 1;
-      p.position.lerpVectors(p.userData.from, p.userData.to, p.userData.t);
+    if (p.t !== undefined) {
+      p.t += p.speed * 0.01;
+      if (p.t > 1) p.t = 0;
+      if (p.t < 0) p.t = 1;
     }
   }
+
+  updateParticlesInGroup(mainNetwork, particles);
+  updateParticlesInGroup(overviewNetwork, particles);
 
   const W = window.innerWidth;
   const H = window.innerHeight;
@@ -249,6 +240,23 @@ function animate() {
 }
 animate();
 
+function updateParticlesInGroup(group, states) {
+  let i = 0;
+  if (!group) return;
+
+  group.traverse(obj => {
+    if (obj.isMesh && obj.userData?.t !== undefined) {
+      obj.position.lerpVectors(
+        states[i].from,
+        states[i].to,
+        states[i].t
+      );
+      i++;
+    }
+  });
+}
+
+
 
 // --- Handle resize ---
 window.addEventListener('resize', () => {
@@ -268,33 +276,54 @@ window.addEventListener('click', (event) => {
   const H = window.innerHeight;
 
   // --- 1. Only react to clicks in the OVERVIEW (left half) ---
-  if (event.clientX > W / 2 - 5) return;
+  const leftWidth = W / 2;
+  if (event.clientX > leftWidth){
+    const rightOffset = leftWidth + 5;
+    const rightWidth = W / 2 - 5;
+
+    // convert mouse to NDC for right viewport
+    mouse.x = ((event.clientX - rightOffset) / rightWidth) * 2 - 1;
+    mouse.y = (-(event.clientY / H) * 2 + 1);
+
+    // raycast against main scene using main camera
+    raycaster.setFromCamera(mouse, mainCamera);
+    const intersects = raycaster.intersectObjects(mainScene.children, true);
+    if (!intersects.length) return;
+
+    for (const inter of intersects) {
+      if (inter.object.userData && inter.object.userData.id) {
+        // call reset endpoint for that node
+        fetch(`http://127.0.0.1:8000/reset_switches?node_id=${inter.object.userData.id}`)
+          .then(res => res.json())
+          .then(data => {
+            update_network(data);
+          })
+          .catch(err => console.error('reset_switches failed', err));
+        return;
+      }
+    }
+    return;
+  };
 
   // --- 2. Convert mouse position to NDC for LEFT viewport ---
-  mouse.x = (event.clientX / (W / 2 - 5)) * 2 - 1;
-  mouse.y = -(event.clientY / H) * 2 + 1;
+  mouse.x = ((event.clientX / leftWidth) * 2 - 1);
+  mouse.y = (-(event.clientY / H) * 2 + 1);
 
-  // --- 3. Raycast in overview scene ---
+  // --- 3. Raycast from overview camera ---
   raycaster.setFromCamera(mouse, overviewCamera);
 
-  const intersects = raycaster.intersectObjects(
-    overviewScene.children,
-    true
-  );
+  // --- 4. Intersect ray with the z=0 plane (region of the overview) ---
+  const planeZ0 = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+  const target = new THREE.Vector3();
+  const hit = raycaster.ray.intersectPlane(planeZ0, target);
 
-  console.log(intersects);
+  if (!hit) return;
 
-  if (intersects.length === 0) return;
-
-  // --- 4. Get clicked object position (world space) ---
-  const target = intersects[0].point;
-
-  // --- 5. Move MAIN camera & controls ---
+  // --- 5. Move MAIN camera & controls to the clicked region (even if no object) ---
   focusMainCamera(target);
 });
 
 function focusMainCamera(target) {
-  console.log("Focusing main camera to:", target);
   const offset = new THREE.Vector3(0, 0, 200);
 
   const newPosition = target.clone().add(offset);
@@ -310,8 +339,8 @@ function createToggle(type = 'normal') {
   let borderColor = type === 'b' ? 'rgba(200, 200, 200, 0.9)' : 'rgba(200, 200, 200, 0.2)';
   const div = document.createElement('div');
   div.className = 'line-toggle';
-  div.style.width = '12px';
-  div.style.height = '12px';
+  div.style.width = '16px';
+  div.style.height = '16px';
   div.style.borderRadius = '50%';
   div.style.backgroundColor = backgroundColor;
   div.style.border = 'none';
@@ -321,3 +350,83 @@ function createToggle(type = 'normal') {
   return div;
 }
 
+function show_new_network(){
+  fetch('http://127.0.0.1:8000/reset_network').then(response => response.json()).then(data => {
+    update_network(data);
+    const newNetworkBtn = document.getElementById("newNetworkBtn");
+    newNetworkBtn.disabled = false;
+    newNetworkBtn.textContent = "new Network";
+  });
+}
+
+const newNetworkBtn = document.getElementById("newNetworkBtn");
+newNetworkBtn.addEventListener("click", () => {
+  newNetworkBtn.disabled = true;
+  newNetworkBtn.textContent = "Loading...";
+  show_new_network();
+});
+
+function update_network(data){
+  if (mainNetwork) {
+    mainScene.remove(mainNetwork);
+  }
+  if (overviewNetwork) {
+    overviewScene.remove(overviewNetwork);
+  }
+  mainNetwork = createNetwork(data);
+  overviewNetwork = mainNetwork.clone();
+  overviewScene.add(overviewNetwork);
+  mainScene.add(mainNetwork);
+
+  if(data.solved){
+    if (!document.getElementById('solvedOverlay')) {
+      const overlay = document.createElement('div');
+      overlay.id = 'solvedOverlay';
+      Object.assign(overlay.style, {
+        position: 'fixed',
+        left: '50%',
+        top: '50%',
+        transform: 'translate(-50%, -50%)',
+        background: 'rgba(0, 0, 0, 0.8)',
+        padding: '24px 32px',
+        borderRadius: '8px',
+        textAlign: 'center',
+        zIndex: '9999',
+        color: '#ffffff',
+        fontFamily: 'Arial, sans-serif',
+        pointerEvents: 'auto'
+      });
+
+      const text = document.createElement('div');
+      text.textContent = 'Solved !';
+      Object.assign(text.style, {
+        fontSize: '48px',
+        fontWeight: '700',
+        marginBottom: '16px',
+        lineHeight: '1'
+      });
+
+      const btn = document.createElement('button');
+      btn.textContent = 'New Network';
+      Object.assign(btn.style, {
+        padding: '10px 20px',
+        fontSize: '16px',
+        borderRadius: '6px',
+        border: 'none',
+        cursor: 'pointer',
+        background: '#2196F3',
+        color: '#fff'
+      });
+
+      btn.addEventListener('click', () => {
+        const el = document.getElementById('solvedOverlay');
+        if (el) el.remove();
+        show_new_network();
+      });
+
+      overlay.appendChild(text);
+      overlay.appendChild(btn);
+      document.body.appendChild(overlay);
+    }
+  }
+}

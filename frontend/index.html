@@ -53,6 +53,17 @@
     .line-toggle:hover {
       transform: scale(1.2);
     }
+
+    #mainInput {
+      position: fixed;
+      top: 0;
+      left: 50%;
+      width: 50%;
+      height: 100%;
+      pointer-events: auto;
+      background: transparent;
+      z-index: 1;
+    }
   </style>
 </head>
 
@@ -61,6 +72,11 @@
   <canvas id="webgl"></canvas>
   <div id="labelsOverview" class="label-container"></div>
   <div id="labelsMain" class="label-container"></div>
+  <div id="mainInput"></div>
+  <button id="newNetworkBtn" aria-label="Create new network"
+    style="position:fixed;left:12px;bottom:12px;z-index:1000;padding:8px 12px;border-radius:4px;background:#1976d2;color:#fff;border:none;box-shadow:0 2px 6px rgba(0,0,0,0.3);cursor:pointer;font-weight:600;">
+    new Network
+  </button>
 </body>
 
 </html>

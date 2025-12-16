@@ -17,9 +17,10 @@ class Line(BaseModel):
     limit: float = 100.0
 
 
-class Network(BaseModel):
+class NetworkState(BaseModel):
     nodes: dict[str, Node]
     lines: dict[str, Line]
+    solved: bool = False
 
 
 class TopologyChangeRequest(BaseModel):

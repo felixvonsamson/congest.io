@@ -1,6 +1,6 @@
 import math
 import random
-from .schemas import Network, TopologyChangeRequest, Node, Line
+from .schemas import NetworkState, TopologyChangeRequest, Node, Line
 import numpy as np
 
 
@@ -55,10 +55,20 @@ def generate_network(num_nodes: int = 20, width: float = 500.0, height: float = 
 
     # Assign random injections to nodes
     nodes = {}
-    raw = []
-    for i in range(len(points) - 1):
-        raw.append(random.uniform(-100, 100))
-    raw.append(-sum(raw))  # ensure total injection is zero
+    raw = [random.uniform(-100, 100) for _ in range(len(points))]
+
+    # Sum positive (generation) and negative (consumption magnitude)
+    pos_sum = sum(x for x in raw if x > 0)
+    neg_sum = -sum(x for x in raw if x < 0)
+
+    # If one side is larger, scale values on that side down so total generation == total consumption
+    if pos_sum > neg_sum and pos_sum > 0:
+        scale = neg_sum / pos_sum if pos_sum > 0 else 0.0
+        raw = [x * scale if x > 0 else x for x in raw]
+    elif neg_sum > pos_sum and neg_sum > 0:
+        scale = pos_sum / neg_sum if neg_sum > 0 else 0.0
+        raw = [x * scale if x < 0 else x for x in raw]
+    # if both are zero or already balanced, leave raw as-is
     for i, (x, y) in enumerate(points):
         nodes[str(i)] = Node(id=str(i), x=x, y=y, injection=raw[i])
 
@@ -76,7 +86,7 @@ def generate_network(num_nodes: int = 20, width: float = 500.0, height: float = 
                 )
 
     # Convert to Pydantic classes
-    network = Network(nodes=nodes, lines=lines)
+    network = NetworkState(nodes=nodes, lines=lines)
     network = reduce_edges(network)
     network = force_directed_layout(network, k=150.0)
     return network
@@ -268,7 +278,12 @@ def calculate_power_flow(network):
             limit=line.limit,
         )
 
-    return Network(nodes=nodes, lines=updated_lines)
+     # Check if the network is solved (no line exceeds its limit)
+    solved = all(
+        abs(updated_lines[line.id].flow) <= line.limit for line in lines.values()
+    )
+
+    return NetworkState(nodes=nodes, lines=updated_lines, solved=solved)
 
 
 def update_network(network, req: TopologyChangeRequest):
