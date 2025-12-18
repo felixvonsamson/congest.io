@@ -44,11 +44,11 @@ const labelsMain = new THREE.Group();
 const labelsOverview = new THREE.Group();
 
 const labelRendererOverview = new CSS2DRenderer();
-labelRendererOverview.setSize(window.innerWidth / 2, window.innerHeight);
+labelRendererOverview.setSize(window.innerWidth / 2 - 5, window.innerHeight);
 document.getElementById('labelsOverview').appendChild(labelRendererOverview.domElement);
 
 const labelRendererMain = new CSS2DRenderer();
-labelRendererMain.setSize(window.innerWidth / 2, window.innerHeight);
+labelRendererMain.setSize(window.innerWidth / 2 - 5, window.innerHeight);
 document.getElementById('labelsMain').appendChild(labelRendererMain.domElement);
 
 
@@ -104,7 +104,7 @@ function createNetwork(data) {
     // Flow magnitude label using CSS2DObject
     const div = document.createElement('div');
     div.className = 'label';
-    div.textContent = Math.abs(line.flow).toFixed(1);
+    div.textContent = Math.abs(line.flow).toFixed(0);
     div.style.color = 'yellow';
     const label = new CSS2DObject(div);
     label.position.set((from.x + to.x) / 2, (from.y + to.y) / 2, 0);
@@ -182,7 +182,7 @@ function createNetwork(data) {
       // Node injection label using CSS2DObject
       const divMain = document.createElement('div');
       divMain.className = 'label';
-      divMain.textContent = node.injection.toFixed(1);
+      divMain.textContent = node.injection.toFixed(0);
       divMain.style.color = 'white';
       const label = new CSS2DObject(divMain);
       label.position.set(node.x, node.y, 0);
