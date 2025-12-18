@@ -89,7 +89,17 @@ def generate_network(num_nodes: int = 20, width: float = 500.0, height: float = 
     network = NetworkState(nodes=nodes, lines=lines)
     network = reduce_edges(network)
     network = force_directed_layout(network, k=150.0)
-    return network
+
+    state = calculate_power_flow(network)
+    if state.solved:
+        #find the highest flow
+        max_flow = max(abs(line.flow) for line in state.lines.values())
+        # scale all ijections up so that the highest flow is at 110% of the limit
+        scale = 55 / max_flow if max_flow > 0 else 1.0
+        for node in network.nodes.values():
+            node.injection *= scale
+        state = calculate_power_flow(network)
+    return state
 
 
 def reduce_edges(network, factor=0.75, high_degree_node_factor=0.1):

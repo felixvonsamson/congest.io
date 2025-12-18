@@ -30,13 +30,6 @@ def change_node_topology(req: TopologyChangeRequest):
     return state
 
 
-@app.get("/resimulate")
-def resimulate():
-    global network
-    state = calculate_power_flow(network)
-    return state
-
-
 @app.get("/grid")
 def get_initial_grid():
     return network
@@ -53,8 +46,7 @@ def get_network_state():
 def reset_network():
     global network
     network = generate_network()
-    state = calculate_power_flow(network)
-    return state
+    return network
 
 
 @app.get("/new_layout")
