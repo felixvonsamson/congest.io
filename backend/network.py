@@ -2,9 +2,10 @@ import math
 import random
 from .schemas import NetworkState, TopologyChangeRequest, Node, Line
 import numpy as np
+from copy import deepcopy
 
 
-def generate_network(num_nodes: int = 20, width: float = 500.0, height: float = 500.0):
+def generate_network(num_nodes: int = 10, width: float = 500.0, height: float = 500.0):
     """
     Generate a planar graph with nodes positioned in 2D space.
     Each node will have at least degree 3. Edges are created using
@@ -91,7 +92,7 @@ def generate_network(num_nodes: int = 20, width: float = 500.0, height: float = 
     network = force_directed_layout(network, k=150.0)
 
     state = calculate_power_flow(network)
-    if state.solved:
+    if state.cost == 0.0:
         #find the highest flow
         max_flow = max(abs(line.flow) for line in state.lines.values())
         # scale all ijections up so that the highest flow is at 110% of the limit
@@ -102,7 +103,7 @@ def generate_network(num_nodes: int = 20, width: float = 500.0, height: float = 
     return state
 
 
-def reduce_edges(network, factor=0.75, high_degree_node_factor=0.1):
+def reduce_edges(network, factor=0.9, high_degree_node_factor=0.1):
     """
     Reduces the number of edges in the network by the given factor while maintaining connectivity.
     """
@@ -287,14 +288,16 @@ def calculate_power_flow(network):
             flow=float(flows[ell]),
             limit=line.limit,
         )
-
-     # Check if the network is solved (no line exceeds its limit)
-    solved = all(
-        abs(updated_lines[line.id].flow) <= line.limit for line in lines.values()
+    # if all flows are zero, set cost to NaN to indicate unsolvable network state
+    if np.allclose(flows, 0.0):
+        return NetworkState(nodes=nodes, lines=updated_lines, cost=float("nan"))
+    
+    # Calculate cost as the sum overloads
+    cost = sum(
+        max(0.0, abs(updated_lines[line.id].flow) - line.limit) for line in lines.values()
     )
 
-    return NetworkState(nodes=nodes, lines=updated_lines, solved=solved)
-
+    return NetworkState(nodes=nodes, lines=updated_lines, cost=cost)
 
 def update_network(network, req: TopologyChangeRequest):
     """
@@ -371,3 +374,60 @@ def update_network(network, req: TopologyChangeRequest):
         )
         del network.lines[req.line_id]
     return network
+
+def solve_network(network):
+    """
+    Try to find a solution that respects line limits by switching nodes.
+
+    This algorythm starts by switching each switch and looks at the resulting
+    power flow. A cost is defined by the sum of the squared overloads on each line.
+    Each network state is then sorted by cost. It then takes the best network state
+    and tries switching each remaining switch again, storing the new network states
+    and their costs. Then the states are sorted again and the process repeats until
+    a solved network is found or until the maximum number of iterations is reached.
+    """
+    max_iterations = 10
+    network_states = [calculate_power_flow(network)]
+    visited_configs = set()
+    for iteration in range(max_iterations):
+        net = network_states[0]
+        if net.cost == 0.0:
+            return net
+        print(f"Solving iteration {iteration+1}/{max_iterations}")
+        # generate new states by switching each switch
+        for line in list(net.lines.values()):
+            # there are two switches per line, one "to" and one "from"
+            from_node = net.nodes[line.from_node]
+            to_node = net.nodes[line.to_node]
+            if not to_node.id.endswith("b"):
+                # switch "to"
+                req_to = TopologyChangeRequest(
+                    line_id=line.id,
+                    direction="to",
+                )
+                new_net_to = update_network(deepcopy(net), req_to)
+                config_to = frozenset(new_net_to.lines.keys())
+                if config_to not in visited_configs:
+                    visited_configs.add(config_to)
+                    new_state_to = calculate_power_flow(new_net_to)
+                    if new_state_to.cost is not float("nan"):
+                        network_states.append(new_state_to)
+            if not from_node.id.endswith("b"):
+                # switch "from"
+                req_from = TopologyChangeRequest(
+                    line_id=line.id,
+                    direction="from",
+                )
+                new_net_from = update_network(deepcopy(net), req_from)
+                config_from = frozenset(new_net_from.lines.keys())
+                if config_from not in visited_configs:
+                    visited_configs.add(config_from)
+                    new_state_from = calculate_power_flow(new_net_from)
+                    if new_state_from.cost is not float("nan"):
+                        network_states.append(new_state_from)
+
+        network_states = sorted(network_states, key=lambda x: x.cost)
+        print("number of tested states :", len(network_states))
+            # return the best state found
+    best_state = min(network_states, key=lambda x: x.cost)
+    return best_state

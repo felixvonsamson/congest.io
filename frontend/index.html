@@ -4,67 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <title>Electric Grid Visualization</title>
-  <style>
-    body {
-      margin: 0;
-      overflow: hidden;
-    }
-
-    canvas {
-      display: block;
-    }
-
-    .label {
-      pointer-events: none;
-      font-family: sans-serif;
-      font-size: 14px;
-      font-weight: bold;
-      text-shadow: 0 0 5px black;
-    }
-
-    .label-container {
-      position: absolute;
-      top: 0;
-      height: 100%;
-      pointer-events: none;
-      overflow: hidden;
-        }
-
-        #labelsOverview {
-      left: 0;
-      width: calc(50% - 5px);
-        }
-
-        #labelsMain {
-      right: 0;
-      width: calc(50% - 5px);
-        }
-
-        .line-toggle {
-      pointer-events: auto;
-      width: 16px;
-      height: 16px;
-      border-radius: 50%;
-      background-color: blue;
-      border: 2px solid white;
-      cursor: pointer;
-    }
-
-    .line-toggle:hover {
-      transform: scale(1.2);
-    }
-
-    #mainInput {
-      position: fixed;
-      top: 0;
-      left: 50%;
-      width: 50%;
-      height: 100%;
-      pointer-events: auto;
-      background: transparent;
-      z-index: 1;
-    }
-  </style>
+  <link rel="stylesheet" href="./styling.css">
 </head>
 
 <body>
@@ -76,6 +16,9 @@
   <button id="newNetworkBtn" aria-label="Create new network"
     style="position:fixed;left:12px;bottom:12px;z-index:1000;padding:8px 12px;border-radius:4px;background:#1976d2;color:#fff;border:none;box-shadow:0 2px 6px rgba(0,0,0,0.3);cursor:pointer;font-weight:600;">
     new Network
+  </button>
+  <button id="collapseOverviewBtn" aria-label="Collapse overview">
+    ⯇
   </button>
 </body>
 

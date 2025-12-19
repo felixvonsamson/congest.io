@@ -20,9 +20,15 @@ class Line(BaseModel):
 class NetworkState(BaseModel):
     nodes: dict[str, Node]
     lines: dict[str, Line]
-    solved: bool = False
+    cost: float = None
 
 
 class TopologyChangeRequest(BaseModel):
     line_id: str
     direction: str  # "to" or "from"
+
+def update_network_from_dict(data: dict) -> NetworkState:
+    nodes = {node_id: Node(**node_data) for node_id, node_data in data.get("nodes", {}).items()}
+    lines = {line_id: Line(**line_data) for line_id, line_data in data.get("lines", {}).items()}
+    cost = data.get("cost", None)
+    return NetworkState(nodes=nodes, lines=lines, cost=cost)
