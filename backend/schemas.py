@@ -22,13 +22,23 @@ class NetworkState(BaseModel):
     lines: dict[str, Line]
     cost: float = None
 
+    def __lt__(self, other):
+        return self.cost < other.cost
+
 
 class TopologyChangeRequest(BaseModel):
     line_id: str
     direction: str  # "to" or "from"
 
+
 def update_network_from_dict(data: dict) -> NetworkState:
-    nodes = {node_id: Node(**node_data) for node_id, node_data in data.get("nodes", {}).items()}
-    lines = {line_id: Line(**line_data) for line_id, line_data in data.get("lines", {}).items()}
+    nodes = {
+        node_id: Node(**node_data)
+        for node_id, node_data in data.get("nodes", {}).items()
+    }
+    lines = {
+        line_id: Line(**line_data)
+        for line_id, line_data in data.get("lines", {}).items()
+    }
     cost = data.get("cost", None)
     return NetworkState(nodes=nodes, lines=lines, cost=cost)

@@ -42,8 +42,8 @@ def get_initial_grid():
 @app.get("/network_state")
 def get_network_state():
     global network
-    state = calculate_power_flow(network)
-    return state
+    network = calculate_power_flow(network)
+    return network
 
 
 @app.post("/reset_network")
@@ -57,8 +57,8 @@ def reset_network():
 def get_new_layout():
     global network
     network = force_directed_layout(network, k=150.0)
-    state = calculate_power_flow(network)
-    return state
+    network = calculate_power_flow(network)
+    return network
 
 
 @app.post("/switch_node")
@@ -75,8 +75,9 @@ def switch_node(switch_id: str):
             direction=direction,
         ),
     )
-    state = calculate_power_flow(network)
-    return state
+    network = calculate_power_flow(network)
+    return network
+
 
 @app.post("/reset_switches")
 def reset_switches(node_id: str):
@@ -98,14 +99,16 @@ def reset_switches(node_id: str):
                     direction="to",
                 ),
             )
-    state = calculate_power_flow(network)
-    return state
+    network = calculate_power_flow(network)
+    return network
+
 
 @app.post("/solve")
 def solve_net():
     global network
-    state = solve_network(network)
-    return state
+    network = solve_network(network)
+    return network
+
 
 @app.get("/save_network")
 def save_network():
@@ -117,6 +120,7 @@ def save_network():
         json.dump(network.dict(), f)
     return {"status": "Network saved", "file": filepath}
 
+
 @app.get("/load_network")
 def load_network(file_path: str):
     global network
@@ -125,5 +129,5 @@ def load_network(file_path: str):
     with open(file_path, "r") as f:
         data = json.load(f)
     network = update_network_from_dict(data)
-    state = calculate_power_flow(network)
-    return state
+    network = calculate_power_flow(network)
+    return network

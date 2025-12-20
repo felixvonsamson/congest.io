@@ -28,12 +28,7 @@ overviewScene.background = new THREE.Color(settings.colors.background);
 const mainScene = new THREE.Scene();
 mainScene.background = new THREE.Color(settings.colors.background);
 
-let aspect = window.innerWidth / window.innerHeight;
-if (isPortrait) {
-  aspect *= 2;
-} else {
-  aspect *= 0.5;
-}
+let aspect = viewportWidth / viewportHeight;
 const d = 400;  // size of view volume
 
 const overviewCamera = new THREE.OrthographicCamera(
@@ -69,7 +64,7 @@ document.getElementById('labelsOverview').appendChild(labelRendererOverview.domE
 document.getElementById('labelsMain').appendChild(labelRendererMain.domElement);
 
 // --- Controls ---
-const inputEl = document.getElementById('mainInput');
+const inputEl = document.getElementById('labelsMain');
 const controls = new OrbitControls(mainCamera, inputEl);
 controls.enableRotate = false;  // no rotation
 controls.target.set(250, 250, 0);
@@ -139,12 +134,8 @@ function createNetwork(data) {
       const toggleDiv = createToggle(type = type);
       toggleDiv.dataset.lineNodeID = line.id + "_" + end;
       toggleDiv.addEventListener('click', (event) => {
+        console.log('Toggle clicked for', event.currentTarget.dataset.lineNodeID);
         const switchID = event.currentTarget.dataset.lineNodeID;
-        if (toggleDiv.style.backgroundColor === 'blue') {
-          toggleDiv.style.backgroundColor = 'green';
-        } else {
-          toggleDiv.style.backgroundColor = 'blue';
-        }
         // Send switch request to server
         fetch(`http://127.0.0.1:8000/switch_node?switch_id=${switchID}`, { method: 'POST' })
           .then(response => response.json())
@@ -196,7 +187,7 @@ function createNetwork(data) {
         depthWrite: false
       });
       const nodeMesh = new THREE.Mesh(nodeGeom, material);
-      nodeMesh.userData = {id: node.id};
+      nodeMesh.userData = { id: node.id };
       networkGroup.add(nodeMesh);
 
       // Node injection label using CSS2DObject
@@ -254,7 +245,7 @@ function animate() {
       renderer.setScissor(0, viewportHeight + 2 * settings.misc.gap, viewportWidth, viewportHeight);
       renderer.setScissorTest(true);
       renderer.render(overviewScene, overviewCamera);
-      
+
       // --- Render bottom interactive camera ---
       renderer.setViewport(0, 0, viewportWidth, viewportHeight);
       renderer.setScissor(0, 0, viewportWidth, viewportHeight);
@@ -264,11 +255,11 @@ function animate() {
   } else {
     if (collapseOverview) {
       // --- Render only right interactive camera ---
-      renderer.setViewport(2*settings.misc.gap, 0, viewportWidth, viewportHeight);
-      renderer.setScissor(2*settings.misc.gap, 0, viewportWidth, viewportHeight);
+      renderer.setViewport(2 * settings.misc.gap, 0, viewportWidth, viewportHeight);
+      renderer.setScissor(2 * settings.misc.gap, 0, viewportWidth, viewportHeight);
       renderer.setScissorTest(true);
       renderer.render(mainScene, mainCamera);
-    }else{
+    } else {
       // --- Render left static overview ---
       renderer.setViewport(0, 0, viewportWidth, viewportHeight);
       renderer.setScissor(0, 0, viewportWidth, viewportHeight);
@@ -283,8 +274,7 @@ function animate() {
     }
   }
   // --- Render MAIN labels into right half ---
-  console.log("collapseOverview:", collapseOverview);
-  if (!collapseOverview){
+  if (!collapseOverview) {
     labelRendererOverview.render(labelsOverview, overviewCamera);
   }
   labelRendererMain.render(labelsMain, mainCamera);
@@ -324,15 +314,20 @@ window.addEventListener('resize', () => {
 });
 
 window.addEventListener('click', (event) => {
+  if (event.target.closest('.ui-element')) return;
   // --- 1. Only react to clicks in the OVERVIEW (left half) ---
-  let mouseInMainViewport = event.clientX > viewportWidth - 5*settings.misc.gap;
+  let mouseInMainViewport = event.clientX > viewportWidth;
   if (isPortrait) {
-    mouseInMainViewport = event.clientY > viewportHeight - 5*settings.misc.gap;
+    mouseInMainViewport = event.clientY > viewportHeight;
   }
   if (mouseInMainViewport || collapseOverview) {
     // convert mouse to NDC for right viewport
-    mouse.x = ((event.clientX - rightOffset) / rightWidth) * 2 - 1;
-    mouse.y = (-(event.clientY / H) * 2 + 1);
+    let rightOffset = viewportWidth + 2 * settings.misc.gap;
+    if (isPortrait) {
+      rightOffset = 0;
+    }
+    mouse.x = ((event.clientX - rightOffset) / viewportWidth) * 2 - 1;
+    mouse.y = (-event.clientY / viewportHeight) * 2 + 1;
 
     // raycast against main scene using main camera
     raycaster.setFromCamera(mouse, mainCamera);
@@ -394,18 +389,31 @@ function createToggle(type = 'normal') {
   let borderColor = type === 'b' ? 'rgba(200, 200, 200, 0.9)' : 'rgba(200, 200, 200, 0.2)';
   const div = document.createElement('div');
   div.className = 'line-toggle';
-  div.style.width = '16px';
-  div.style.height = '16px';
-  div.style.borderRadius = '50%';
   div.style.backgroundColor = backgroundColor;
-  div.style.border = 'none';
   div.style.outline = `4px solid ${borderColor}`;
   div.style.outlineOffset = '2px';
-  div.style.cursor = 'pointer';
+  attachToggleEvents(div);
   return div;
 }
 
-function show_new_network(){
+function attachToggleEvents(el) {
+  el.addEventListener('pointerdown', (e) => {
+    e.stopPropagation();
+    controls.enabled = false;
+  });
+
+  el.addEventListener('pointerup', (e) => {
+    e.stopPropagation();
+    controls.enabled = true;
+    handleToggle(e);
+  });
+
+  el.addEventListener('pointerleave', () => {
+    controls.enabled = true;
+  });
+}
+
+function show_new_network() {
   fetch('http://127.0.0.1:8000/reset_network', { method: 'POST' }).then(response => response.json()).then(data => {
     update_network(data);
     const newNetworkBtn = document.getElementById("newNetworkBtn");
@@ -424,36 +432,57 @@ newNetworkBtn.addEventListener("click", () => {
 const collapseOverviewBtn = document.getElementById("collapseOverviewBtn");
 collapseOverviewBtn.addEventListener("click", () => {
   collapseOverview = !collapseOverview;
+  const labelsOverviewDiv = document.getElementById('labelsOverview');
+  const labelsMainDiv = document.getElementById('labelsMain');
   if (collapseOverview) {
     overviewScene.remove(overviewNetwork);
+    labelRendererOverview.domElement.style.display = 'none';
     if (isPortrait) {
       collapseOverviewBtn.textContent = "⯆";
       collapseOverviewBtn.style.top = "10px";
       viewportHeight = H - 2 * settings.misc.gap;
       viewportWidth = W;
-    }else{
+      labelsOverviewDiv.style.height = viewportHeight + 'px';
+      labelsMainDiv.style.height = viewportHeight + 'px';
+      labelsMainDiv.style.top = 2 * settings.misc.gap + 'px';
+    } else {
       collapseOverviewBtn.textContent = "⯈";
       collapseOverviewBtn.style.left = "10px";
       viewportWidth = W - 2 * settings.misc.gap;
       viewportHeight = H;
+      labelsOverviewDiv.style.width = viewportWidth + 'px';
+      labelsMainDiv.style.width = viewportWidth + 'px';
     }
   } else {
     overviewScene.add(overviewNetwork);
+    labelRendererOverview.domElement.style.display = 'block';
     if (isPortrait) {
       collapseOverviewBtn.textContent = "⯅";
       collapseOverviewBtn.style.top = "50%";
       viewportWidth = W;
       viewportHeight = 0.5 * H - settings.misc.gap;
-    }else{
+      labelsOverviewDiv.style.height = viewportHeight + 'px';
+      labelsMainDiv.style.height = viewportHeight + 'px';
+      labelsMainDiv.style.top = (viewportHeight + 2 * settings.misc.gap) + 'px';
+    } else {
       collapseOverviewBtn.textContent = "⯇";
       collapseOverviewBtn.style.left = "50%";
       viewportWidth = 0.5 * W - settings.misc.gap;
       viewportHeight = H;
+      labelsOverviewDiv.style.width = viewportWidth + 'px';
+      labelsMainDiv.style.width = viewportWidth + 'px';
     }
   }
+  labelRendererMain.setSize(viewportWidth, viewportHeight);
+  aspect = viewportWidth / viewportHeight;
+  mainCamera.left = -d * aspect * 0.3;
+  mainCamera.right = d * aspect * 0.3;
+  mainCamera.top = d * 0.3;
+  mainCamera.bottom = -d * 0.3;
+  mainCamera.updateProjectionMatrix();
 });
 
-function update_network(data){
+function update_network(data) {
   if (mainNetwork) {
     mainScene.remove(mainNetwork);
   }
@@ -465,10 +494,11 @@ function update_network(data){
   overviewScene.add(overviewNetwork);
   mainScene.add(mainNetwork);
 
-  if(data.cost === 0.0){
+  if (data.cost === 0.0) {
     if (!document.getElementById('solvedOverlay')) {
       const overlay = document.createElement('div');
       overlay.id = 'solvedOverlay';
+      overlay.className = 'ui-element';
       Object.assign(overlay.style, {
         position: 'fixed',
         left: '50%',
