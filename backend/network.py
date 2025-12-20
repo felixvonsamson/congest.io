@@ -1,8 +1,15 @@
 import math
 import random
-from .schemas import NetworkState, TopologyChangeRequest, Node, Line
+from .schemas import (
+    NetworkState,
+    TopologyChangeRequest,
+    Node,
+    Line,
+    update_network_from_dict,
+)
 import numpy as np
 import heapq
+import json
 from copy import deepcopy
 
 
@@ -437,3 +444,40 @@ def solve_network(network):
     # return the best state found so far
     best_state = min(previous_states + network_states, key=lambda x: x.cost)
     return best_state
+
+
+def load_level(level: int):
+    if level < 1 or level > 35:
+        raise ValueError("Level must be between 1 and 35")
+    file_path = f"levels/Level{level}.json"
+    with open(file_path, "r") as f:
+        data = json.load(f)
+    network = update_network_from_dict(data)
+    network = reset_all_switches(network)
+    network = calculate_power_flow(network)
+    return network
+
+
+def reset_all_switches(network):
+    """
+    Resets all switches in the network to their original positions.
+    this means removing any b nodes and the "b" character from line ids.
+    """
+    for line in list(network.lines.values()):
+        if "b" in line.id:
+            from_node_id = line.from_node.replace("b", "")
+            to_node_id = line.to_node.replace("b", "")
+            new_line_id = f"L{from_node_id}-{to_node_id}"
+            network.lines[new_line_id] = Line(
+                id=new_line_id,
+                from_node=from_node_id,
+                to_node=to_node_id,
+                flow=0.0,
+                limit=line.limit,
+            )
+            del network.lines[line.id]
+    # remove all 'b' nodes
+    for node_id in list(network.nodes.keys()):
+        if node_id.endswith("b"):
+            del network.nodes[node_id]
+    return network

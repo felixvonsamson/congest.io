@@ -405,7 +405,6 @@ function attachToggleEvents(el) {
   el.addEventListener('pointerup', (e) => {
     e.stopPropagation();
     controls.enabled = true;
-    handleToggle(e);
   });
 
   el.addEventListener('pointerleave', () => {
@@ -422,12 +421,22 @@ function show_new_network() {
   });
 }
 
-const newNetworkBtn = document.getElementById("newNetworkBtn");
-newNetworkBtn.addEventListener("click", () => {
-  newNetworkBtn.disabled = true;
-  newNetworkBtn.textContent = "Loading...";
-  show_new_network();
-});
+function next_level() {
+  fetch('http://127.0.0.1:8000/next_level', { method: 'POST' }).then(response => response.json()).then(data => {
+    update_network(data);
+    const solvedOverlay = document.getElementById("solvedOverlay");
+    if (solvedOverlay) {
+      solvedOverlay.remove();
+    }
+  });
+}
+
+// const newNetworkBtn = document.getElementById("newNetworkBtn");
+// newNetworkBtn.addEventListener("click", () => {
+//   newNetworkBtn.disabled = true;
+//   newNetworkBtn.textContent = "Loading...";
+//   show_new_network();
+// });
 
 const collapseOverviewBtn = document.getElementById("collapseOverviewBtn");
 collapseOverviewBtn.addEventListener("click", () => {
@@ -524,7 +533,8 @@ function update_network(data) {
       });
 
       const btn = document.createElement('button');
-      btn.textContent = 'New Network';
+      btn.id = 'nextLevelBtn';
+      btn.textContent = 'Next Level';
       Object.assign(btn.style, {
         padding: '10px 20px',
         fontSize: '16px',
@@ -536,9 +546,10 @@ function update_network(data) {
       });
 
       btn.addEventListener('click', () => {
-        const el = document.getElementById('solvedOverlay');
-        if (el) el.remove();
-        show_new_network();
+        const nextLevelBtn = document.getElementById("nextLevelBtn");
+        nextLevelBtn.disabled = true;
+        nextLevelBtn.textContent = "Loading...";
+        next_level();
       });
 
       overlay.appendChild(text);

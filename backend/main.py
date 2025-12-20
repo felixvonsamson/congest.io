@@ -6,6 +6,7 @@ from .network import (
     update_network,
     force_directed_layout,
     solve_network,
+    load_level,
 )
 from .schemas import TopologyChangeRequest, update_network_from_dict
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,7 +24,8 @@ app.add_middleware(
 )
 
 # Global in-memory network (placeholder)
-network = generate_network()
+level = 1
+network = load_level(level)
 
 
 @app.post("/change_node_topology")
@@ -130,4 +132,12 @@ def load_network(file_path: str):
         data = json.load(f)
     network = update_network_from_dict(data)
     network = calculate_power_flow(network)
+    return network
+
+
+@app.post("/next_level")
+def next_level():
+    global level, network
+    level += 1
+    network = load_level(level)
     return network
