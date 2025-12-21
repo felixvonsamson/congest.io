@@ -347,9 +347,7 @@ window.addEventListener('resize', () => {
 controls.addEventListener('change', () => {
   // when camera is moved, determine the viewport in the main view and show it in the form of a rectangle in the overview
   cameraRect.position.copy(controls.target);
-  const zoom = mainCamera.zoom;
-  console.log(zoom);
-  cameraRect.scale.setScalar(1 / zoom);
+  cameraRect.scale.setScalar(1 / mainCamera.zoom);
 });
 
 window.addEventListener('click', (event) => {
@@ -553,7 +551,6 @@ function update_network(data) {
   const min_x = Math.min(...Object.values(data.nodes).map(n => n.x));
   const max_y = Math.max(...Object.values(data.nodes).map(n => n.y));
   const min_y = Math.min(...Object.values(data.nodes).map(n => n.y));
-  console.log({ max_x, min_x, max_y, min_y });
   const center_x = (max_x + min_x) / 2;
   const center_y = (max_y + min_y) / 2;
   let size_x = (max_x - min_x) * 1.2;
