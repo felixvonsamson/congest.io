@@ -18,6 +18,7 @@ if (isPortrait) {
 let particles = [];
 let mainNetwork = null;
 let overviewNetwork = null;
+let cameraRect = null;
 
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
@@ -35,9 +36,7 @@ const overviewCamera = new THREE.OrthographicCamera(
   -d * aspect, d * aspect,   // left, right
   d, -d                    // top, bottom
 );
-overviewCamera.position.set(250, 250, 500);
 overviewCamera.up.set(0, 1, 0);
-overviewCamera.lookAt(250, 250, 0);
 
 const mainCamera = new THREE.OrthographicCamera(
   -d * aspect * 0.3, d * aspect * 0.3,   // left, right
@@ -70,9 +69,25 @@ controls.enableRotate = false;  // no rotation
 controls.target.set(250, 250, 0);
 controls.update();
 
+const rectangleGeometry = new THREE.BufferGeometry();
+const rectWidth = mainCamera.right - mainCamera.left;
+const rectHeight = mainCamera.top - mainCamera.bottom;
+const vertices = new Float32Array([
+  -rectWidth / 2, -rectHeight / 2, 0,
+  rectWidth / 2, -rectHeight / 2, 0,
+  rectWidth / 2, rectHeight / 2, 0,
+  -rectWidth / 2, rectHeight / 2, 0,
+  -rectWidth / 2, -rectHeight / 2, 0
+]);
+rectangleGeometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+const rectangleMaterial = new THREE.LineBasicMaterial({ color: 'rgb(255, 150, 0)' });
+cameraRect = new THREE.Line(rectangleGeometry, rectangleMaterial);
+cameraRect.position.copy(controls.target);
+overviewScene.add(cameraRect);
+
 if (isPortrait) {
   document.getElementById('collapseOverviewBtn').textContent = "⯅";
-}
+}createNetwork
 
 // --- Fetch network data ---
 async function fetchNetwork() {
@@ -111,7 +126,14 @@ function createNetwork(data) {
       const particleGeometry = new THREE.ShapeGeometry(particleShape, 16);
       const particleMaterial = new THREE.MeshBasicMaterial({ color: 0xffff00, side: THREE.DoubleSide, depthWrite: false });
       const particle = new THREE.Mesh(particleGeometry, particleMaterial);
-      particle.userData = { from: points[0], to: points[1], speed: line.flow / line_length * 2, t: i / n_particles };
+      particle.userData = { 
+        from: points[0], 
+        to: points[1], 
+        from_green: from.id.includes('b'),
+        to_green: to.id.includes('b'),
+        speed: line.flow / line_length * 2, 
+        t: i / n_particles 
+      };
       particles.push(particle.userData);
       networkGroup.add(particle);
     }
@@ -149,9 +171,9 @@ function createNetwork(data) {
       const v_dir = new THREE.Vector3().subVectors(v_to, v_from).normalize();
       let v_pos;
       if (end === "from") {
-        v_pos = v_from.clone().add(v_dir.clone().multiplyScalar(12));
+        v_pos = v_from.clone().add(v_dir.clone().multiplyScalar(15));
       } else {
-        v_pos = v_to.clone().add(v_dir.clone().multiplyScalar(-12));
+        v_pos = v_to.clone().add(v_dir.clone().multiplyScalar(-15));
       }
       toggle.position.set(v_pos.x, v_pos.y, 0);
       labelsMain.add(toggle);
@@ -292,6 +314,15 @@ function updateParticlesInGroup(group, states) {
         states[i].to,
         states[i].t
       );
+      if (states[i].from_green && states[i].to_green) {
+        obj.material.color.setHSL(0.37, 1, 0.4);
+      } else if (states[i].to_green) {
+        obj.material.color.setHSL(0.12 + 0.25 * states[i].t, 1, 0.4);
+      } else if (states[i].from_green) {
+        obj.material.color.setHSL(0.37 - 0.25 * states[i].t, 1, 0.4);
+      } else {
+        obj.material.color.setHSL(0.12, 1, 0.4);
+      }
       i++;
     }
   });
@@ -313,6 +344,14 @@ window.addEventListener('resize', () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
+controls.addEventListener('change', () => {
+  // when camera is moved, determine the viewport in the main view and show it in the form of a rectangle in the overview
+  cameraRect.position.copy(controls.target);
+  const zoom = mainCamera.zoom;
+  console.log(zoom);
+  cameraRect.scale.setScalar(1 / zoom);
+});
+
 window.addEventListener('click', (event) => {
   if (event.target.closest('.ui-element')) return;
   // --- 1. Only react to clicks in the OVERVIEW (left half) ---
@@ -323,11 +362,19 @@ window.addEventListener('click', (event) => {
   if (mouseInMainViewport || collapseOverview) {
     // convert mouse to NDC for right viewport
     let rightOffset = viewportWidth + 2 * settings.misc.gap;
+    let topOffset = 0;
+    if (collapseOverview){
+      rightOffset = 2 * settings.misc.gap;
+    }
     if (isPortrait) {
       rightOffset = 0;
+      topOffset = viewportHeight + 2 * settings.misc.gap;
+      if (collapseOverview){
+        topOffset = 2 * settings.misc.gap;
+      }
     }
     mouse.x = ((event.clientX - rightOffset) / viewportWidth) * 2 - 1;
-    mouse.y = (-event.clientY / viewportHeight) * 2 + 1;
+    mouse.y = (-(event.clientY - topOffset) / viewportHeight) * 2 + 1;
 
     // raycast against main scene using main camera
     raycaster.setFromCamera(mouse, mainCamera);
@@ -375,9 +422,7 @@ window.addEventListener('click', (event) => {
 
 function focusMainCamera(target) {
   const offset = new THREE.Vector3(0, 0, 200);
-
   const newPosition = target.clone().add(offset);
-
   mainCamera.position.copy(newPosition);
   controls.target.copy(target);
   controls.update();
@@ -502,6 +547,37 @@ function update_network(data) {
   overviewNetwork = mainNetwork.clone();
   overviewScene.add(overviewNetwork);
   mainScene.add(mainNetwork);
+
+  // Center overview camera on network
+  const max_x = Math.max(...Object.values(data.nodes).map(n => n.x));
+  const min_x = Math.min(...Object.values(data.nodes).map(n => n.x));
+  const max_y = Math.max(...Object.values(data.nodes).map(n => n.y));
+  const min_y = Math.min(...Object.values(data.nodes).map(n => n.y));
+  console.log({ max_x, min_x, max_y, min_y });
+  const center_x = (max_x + min_x) / 2;
+  const center_y = (max_y + min_y) / 2;
+  let size_x = (max_x - min_x) * 1.2;
+  let size_y = (max_y - min_y) * 1.2;
+  if (size_x > size_y * aspect) {
+    size_y = size_x / aspect;
+  } else {
+    size_x = size_y * aspect;
+  }
+  overviewCamera.left = -size_x / 2;
+  overviewCamera.right = size_x / 2;
+  overviewCamera.top = size_y / 2;
+  overviewCamera.bottom = -size_y / 2;
+  overviewCamera.position.set(center_x, center_y, 500);
+  overviewCamera.lookAt(center_x, center_y, 0);
+  overviewCamera.updateProjectionMatrix();
+
+  // Update level indicator
+  const levelIndicator = document.getElementById('LevelInfoPanel');
+  if (data.level === null) {
+    levelIndicator.textContent = `Custom Network`;
+  } else {
+    levelIndicator.textContent = `Level ${data.level}`;
+  }
 
   if (data.cost === 0.0) {
     if (!document.getElementById('solvedOverlay')) {

@@ -1,5 +1,7 @@
 from pydantic import BaseModel
 from typing import List, Optional
+import json
+import os
 
 
 class Node(BaseModel):
@@ -20,7 +22,8 @@ class Line(BaseModel):
 class NetworkState(BaseModel):
     nodes: dict[str, Node]
     lines: dict[str, Line]
-    cost: float = None
+    cost: float = 10**6
+    level: Optional[int] = None
 
     def __lt__(self, other):
         return self.cost < other.cost
@@ -31,7 +34,11 @@ class TopologyChangeRequest(BaseModel):
     direction: str  # "to" or "from"
 
 
-def update_network_from_dict(data: dict) -> NetworkState:
+def update_network_from_file(file_path: str) -> NetworkState:
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"File {file_path} does not exist.")
+    with open(file_path, "r") as f:
+        data = json.load(f)
     nodes = {
         node_id: Node(**node_data)
         for node_id, node_data in data.get("nodes", {}).items()
@@ -40,5 +47,5 @@ def update_network_from_dict(data: dict) -> NetworkState:
         line_id: Line(**line_data)
         for line_id, line_data in data.get("lines", {}).items()
     }
-    cost = data.get("cost", None)
-    return NetworkState(nodes=nodes, lines=lines, cost=cost)
+    level = None if "Level" not in file_path else int(file_path.split("Level")[-1].split(".")[0])
+    return NetworkState(nodes=nodes, lines=lines, level=level)

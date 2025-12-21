@@ -8,7 +8,7 @@ from .network import (
     solve_network,
     load_level,
 )
-from .schemas import TopologyChangeRequest, update_network_from_dict
+from .schemas import TopologyChangeRequest, update_network_from_file
 from fastapi.middleware.cors import CORSMiddleware
 import os
 from datetime import datetime
@@ -126,11 +126,7 @@ def save_network():
 @app.get("/load_network")
 def load_network(file_path: str):
     global network
-    if not os.path.exists(file_path):
-        return {"error": "File does not exist"}
-    with open(file_path, "r") as f:
-        data = json.load(f)
-    network = update_network_from_dict(data)
+    network = update_network_from_file(file_path)
     network = calculate_power_flow(network)
     return network
 

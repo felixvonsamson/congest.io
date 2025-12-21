@@ -5,7 +5,7 @@ from .schemas import (
     TopologyChangeRequest,
     Node,
     Line,
-    update_network_from_dict,
+    update_network_from_file,
 )
 import numpy as np
 import heapq
@@ -298,7 +298,7 @@ def calculate_power_flow(network):
         )
     # if all flows are zero, set cost to NaN to indicate unsolvable network state
     if np.allclose(flows, 0.0):
-        return NetworkState(nodes=nodes, lines=updated_lines, cost=float("nan"))
+        return NetworkState(nodes=nodes, lines=updated_lines, cost=float("nan"), level=network.level)
 
     # Calculate cost as the sum overloads
     cost = sum(
@@ -306,7 +306,7 @@ def calculate_power_flow(network):
         for line in lines.values()
     )
 
-    return NetworkState(nodes=nodes, lines=updated_lines, cost=cost)
+    return NetworkState(nodes=nodes, lines=updated_lines, cost=cost, level=network.level)
 
 
 def update_network(network, req: TopologyChangeRequest):
@@ -450,9 +450,7 @@ def load_level(level: int):
     if level < 1 or level > 35:
         raise ValueError("Level must be between 1 and 35")
     file_path = f"levels/Level{level}.json"
-    with open(file_path, "r") as f:
-        data = json.load(f)
-    network = update_network_from_dict(data)
+    network = update_network_from_file(file_path)
     network = reset_all_switches(network)
     network = calculate_power_flow(network)
     return network
