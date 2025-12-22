@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
-import { settings } from '../settings.js';
+import { config } from '../config.js';
 import { createToggle } from '../ui/toggles.js';
 
 export function createNetwork(data, state, controls, callbacks) {
@@ -19,8 +19,8 @@ export function createNetwork(data, state, controls, callbacks) {
     // Base line
     const material = new THREE.LineBasicMaterial({
       color: Math.abs(line.flow) > line.limit
-        ? settings.colors.lineOverload
-        : settings.colors.line
+        ? config.colors.lineOverload
+        : config.colors.line
     });
     const points = [
         new THREE.Vector3(from.x, from.y, 0),
@@ -79,7 +79,7 @@ export function createNetwork(data, state, controls, callbacks) {
     if (id.includes('b')) {
       const nodeMesh = new THREE.Mesh(bNodeGeometry, bNodeMaterial);
       nodeMesh.position.set(node.x, node.y, 0);
-      nodeMesh.renderOrder = settings.render_order.bNodes;
+      nodeMesh.renderOrder = config.render_order.bNodes;
       group.add(nodeMesh);
     } else {
       var material = nodeProdMaterial
@@ -89,7 +89,7 @@ export function createNetwork(data, state, controls, callbacks) {
       const nodeMesh = new THREE.Mesh(nodeGeometry, material);
       nodeMesh.position.set(node.x, node.y, 0);
       nodeMesh.userData = { id: node.id };
-      nodeMesh.renderOrder = settings.render_order.nodes;
+      nodeMesh.renderOrder = config.render_order.nodes;
       group.add(nodeMesh);
 
       // Node injection label using CSS2DObject
@@ -115,7 +115,7 @@ export function createNetwork(data, state, controls, callbacks) {
 
 const particleGeometry = (() => {
   const shape = new THREE.Shape();
-  shape.absarc(0, 0, settings.sizes.particleRadius);
+  shape.absarc(0, 0, config.sizes.particleRadius);
   return new THREE.ShapeGeometry(shape, 16);
 })();
 
@@ -140,24 +140,24 @@ function createParticle(from, to, speed, t0) {
 
 const nodeGeometry = (() => {
   const shape = new THREE.Shape();
-  shape.absarc(0, 0, settings.sizes.nodeRadius);
+  shape.absarc(0, 0, config.sizes.nodeRadius);
   return new THREE.ShapeGeometry(shape, 32);
 })();
 const nodeProdMaterial = new THREE.MeshBasicMaterial({ 
-  color: settings.colors.nodeProd, 
+  color: config.colors.nodeProd, 
   side: THREE.DoubleSide, 
   depthWrite: false 
 });
 const nodeConsMaterial = new THREE.MeshBasicMaterial({ 
-  color: settings.colors.nodeCons, 
+  color: config.colors.nodeCons, 
   side: THREE.DoubleSide, 
   depthWrite: false 
 });
 const bNodeGeometry = (() => {
   const shape = new THREE.Shape();
-  shape.absarc(0, 0, settings.sizes.ringRadiusOuter);
+  shape.absarc(0, 0, config.sizes.ringRadiusOuter);
   const holePath = new THREE.Path();
-  holePath.absarc(0, 0, settings.sizes.ringRadiusInner);
+  holePath.absarc(0, 0, config.sizes.ringRadiusInner);
   shape.holes.push(holePath);
   return new THREE.ShapeGeometry(shape, 32);
 })();

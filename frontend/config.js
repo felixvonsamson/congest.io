@@ -1,4 +1,4 @@
-export const settings = {
+export const config = {
   misc: {
     gap: 5,
   },

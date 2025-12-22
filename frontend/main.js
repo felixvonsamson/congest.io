@@ -1,21 +1,24 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
-import { settings } from "./settings.js";
+import { config } from "./config.js";
 
-import { createNetwork } from './network/createNetwork.js';
+import { updateNetwork } from './network/updateNetwork.js';
 
 // --- Settings ---
-let collapseOverview = false;
-let isPortrait = window.innerHeight > window.innerWidth;
 const W = window.innerWidth;
 const H = window.innerHeight;
-let viewportWidth = 0.5 * W - settings.misc.gap;
+let viewportWidth = 0.5 * W - config.misc.gap;
 let viewportHeight = H;
-if (isPortrait) {
+if (window.innerHeight > window.innerWidth) {
   viewportWidth = W;
-  viewportHeight = 0.5 * H - settings.misc.gap;
+  viewportHeight = 0.5 * H - config.misc.gap;
 }
+const settings = {
+  collapseOverview: false,
+  isPortrait: window.innerHeight > window.innerWidth,
+  aspect: viewportWidth / viewportHeight,
+};
 let newCamPosition = null;
 let newControlTarget = null;
 
@@ -33,25 +36,25 @@ const state = {
 };
 
 // --- Create the overview and main scene with camera and renderer ---
-const overviewScene = new THREE.Scene();
-overviewScene.background = new THREE.Color(settings.colors.background);
-const mainScene = new THREE.Scene();
-mainScene.background = new THREE.Color(settings.colors.background);
+const scenes = {
+  overview: new THREE.Scene(),
+  main: new THREE.Scene()
+};
+scenes.overview.background = new THREE.Color(config.colors.background);
+scenes.main.background = new THREE.Color(config.colors.background);
 
-let aspect = viewportWidth / viewportHeight;
 const d = 400;  // size of view volume
-const overviewCamera = new THREE.OrthographicCamera(
-  -d * aspect, d * aspect,   // left, right
-  d, -d                    // top, bottom
-);
-overviewCamera.up.set(0, 1, 0);
-const mainCamera = new THREE.OrthographicCamera(
-  -d * aspect * 0.3, d * aspect * 0.3,   // left, right
-  d * 0.3, -d * 0.3                      // top, bottom
-);
-mainCamera.position.set(250, 250, 500);
-mainCamera.up.set(0, 1, 0);
-mainCamera.lookAt(250, 250, 0);
+const cameras = {
+  overview: new THREE.OrthographicCamera(),
+  main: new THREE.OrthographicCamera(
+    -d * settings.aspect * 0.3, d * settings.aspect * 0.3,   // left, right
+    d * 0.3, -d * 0.3                      // top, bottom
+  )
+};
+cameras.overview.up.set(0, 1, 0);
+cameras.main.position.set(250, 250, 500);
+cameras.main.up.set(0, 1, 0);
+cameras.main.lookAt(250, 250, 0);
 
 const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('webgl'), antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -68,15 +71,15 @@ document.getElementById('labelsMain').appendChild(labelRendererMain.domElement);
 
 // --- Controls ---
 const inputEl = document.getElementById('labelsMain');
-const controls = new OrbitControls(mainCamera, inputEl);
+const controls = new OrbitControls(cameras.main, inputEl);
 controls.enableRotate = false;  // no rotation
 controls.target.set(250, 250, 0);
 controls.update();
 
 // --- Camera rectangle in overview ---
 const rectangleGeometry = new THREE.BufferGeometry();
-const rectWidth = mainCamera.right - mainCamera.left;
-const rectHeight = mainCamera.top - mainCamera.bottom;
+const rectWidth = cameras.main.right - cameras.main.left;
+const rectHeight = cameras.main.top - cameras.main.bottom;
 const vertices = new Float32Array([
   -rectWidth / 2, -rectHeight / 2, 0,
   rectWidth / 2, -rectHeight / 2, 0,
@@ -88,11 +91,11 @@ rectangleGeometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3
 const rectangleMaterial = new THREE.LineBasicMaterial({ color: 'rgb(255, 150, 0)' });
 cameraRect = new THREE.Line(rectangleGeometry, rectangleMaterial);
 cameraRect.position.copy(controls.target);
-overviewScene.add(cameraRect);
+scenes.overview.add(cameraRect);
 
 // --- Update collapse button symbol ---
-if (isPortrait) {
-  document.getElementById('collapseOverviewBtn').textContent = "⯅";
+if (settings.isPortrait) {
+  document.getElementById('settings.collapseOverviewBtn').textContent = "⯅";
 }
 
 // --- Fetch network data ---
@@ -104,19 +107,19 @@ async function fetchNetwork() {
 
 // --- Main ---
 fetchNetwork().then(data => {
-  update_network(data);
+  updateNetwork(settings, scenes, cameras, data, state, controls, { onToggle });
 });
 
 function animate() {
   requestAnimationFrame(animate);
   if(newCamPosition && newControlTarget) {
     // Smoothly interpolate camera position and control target
-    mainCamera.position.lerp(newCamPosition, 0.2);
+    cameras.main.position.lerp(newCamPosition, 0.2);
     controls.target.lerp(newControlTarget, 0.2);
     // If close enough, snap to target
-    if (mainCamera.position.distanceTo(newCamPosition) < 0.1 &&
+    if (cameras.main.position.distanceTo(newCamPosition) < 0.1 &&
         controls.target.distanceTo(newControlTarget) < 0.1) {
-      mainCamera.position.copy(newCamPosition);
+      cameras.main.position.copy(newCamPosition);
       controls.target.copy(newControlTarget);
       newCamPosition = null;
       newControlTarget = null;
@@ -139,52 +142,52 @@ function animate() {
   const W = window.innerWidth;
   const H = window.innerHeight;
 
-  if (isPortrait) {
-    if (collapseOverview) {
+  if (settings.isPortrait) {
+    if (settings.collapseOverview) {
       // --- Render only bottom interactive camera ---
       renderer.setViewport(0, 0, viewportWidth, viewportHeight);
       renderer.setScissor(0, 0, viewportWidth, viewportHeight);
       renderer.setScissorTest(true);
-      renderer.render(mainScene, mainCamera);
+      renderer.render(scenes.main, cameras.main);
     } else {
       // --- Render top overview ---
-      renderer.setViewport(0, viewportHeight + 2 * settings.misc.gap, viewportWidth, viewportHeight);
-      renderer.setScissor(0, viewportHeight + 2 * settings.misc.gap, viewportWidth, viewportHeight);
+      renderer.setViewport(0, viewportHeight + 2 * config.misc.gap, viewportWidth, viewportHeight);
+      renderer.setScissor(0, viewportHeight + 2 * config.misc.gap, viewportWidth, viewportHeight);
       renderer.setScissorTest(true);
-      renderer.render(overviewScene, overviewCamera);
+      renderer.render(scenes.overview, cameras.overview);
 
       // --- Render bottom interactive camera ---
       renderer.setViewport(0, 0, viewportWidth, viewportHeight);
       renderer.setScissor(0, 0, viewportWidth, viewportHeight);
       renderer.setScissorTest(true);
-      renderer.render(mainScene, mainCamera);
+      renderer.render(scenes.main, cameras.main);
     }
   } else {
-    if (collapseOverview) {
+    if (settings.collapseOverview) {
       // --- Render only right interactive camera ---
-      renderer.setViewport(2 * settings.misc.gap, 0, viewportWidth, viewportHeight);
-      renderer.setScissor(2 * settings.misc.gap, 0, viewportWidth, viewportHeight);
+      renderer.setViewport(2 * config.misc.gap, 0, viewportWidth, viewportHeight);
+      renderer.setScissor(2 * config.misc.gap, 0, viewportWidth, viewportHeight);
       renderer.setScissorTest(true);
-      renderer.render(mainScene, mainCamera);
+      renderer.render(scenes.main, cameras.main);
     } else {
       // --- Render left static overview ---
       renderer.setViewport(0, 0, viewportWidth, viewportHeight);
       renderer.setScissor(0, 0, viewportWidth, viewportHeight);
       renderer.setScissorTest(true);
-      renderer.render(overviewScene, overviewCamera);
+      renderer.render(scenes.overview, cameras.overview);
 
       // --- Render right interactive camera ---
-      renderer.setViewport(viewportWidth + 2 * settings.misc.gap, 0, viewportWidth, viewportHeight);
-      renderer.setScissor(viewportWidth + 2 * settings.misc.gap, 0, viewportWidth, viewportHeight);
+      renderer.setViewport(viewportWidth + 2 * config.misc.gap, 0, viewportWidth, viewportHeight);
+      renderer.setScissor(viewportWidth + 2 * config.misc.gap, 0, viewportWidth, viewportHeight);
       renderer.setScissorTest(true);
-      renderer.render(mainScene, mainCamera);
+      renderer.render(scenes.main, cameras.main);
     }
   }
   // --- Render MAIN labels into right half ---
-  if (!collapseOverview) {
-    labelRendererOverview.render(state.labelsOverview, overviewCamera);
+  if (!settings.collapseOverview) {
+    labelRendererOverview.render(state.labelsOverview, cameras.overview);
   }
-  labelRendererMain.render(state.labelsMain, mainCamera);
+  labelRendererMain.render(state.labelsMain, cameras.main);
 }
 animate();
 
@@ -217,11 +220,11 @@ function updateParticlesInGroup(group, states) {
 
 // --- Handle resize ---
 window.addEventListener('resize', () => {
-  isPortrait = window.innerHeight > window.innerWidth;
-  for (const cam of [mainCamera, overviewCamera]) {
-    const aspect = 0.5 * window.innerWidth / window.innerHeight;
-    cam.left = -d * aspect;
-    cam.right = d * aspect;
+  settings.isPortrait = window.innerHeight > window.innerWidth;
+  for (const cam of [cameras.main, cameras.overview]) {
+    settings.aspect = 0.5 * window.innerWidth / window.innerHeight;
+    cam.left = -d * settings.aspect;
+    cam.right = d * settings.aspect;
     cam.top = d;
     cam.bottom = -d;
     cam.updateProjectionMatrix();
@@ -232,36 +235,36 @@ window.addEventListener('resize', () => {
 controls.addEventListener('change', () => {
   // when camera is moved, determine the viewport in the main view and show it in the form of a rectangle in the overview
   cameraRect.position.copy(controls.target);
-  cameraRect.scale.setScalar(1 / mainCamera.zoom);
+  cameraRect.scale.setScalar(1 / cameras.main.zoom);
 });
 
 window.addEventListener('click', (event) => {
   if (event.target.closest('.ui-element')) return;
   // --- 1. Only react to clicks in the OVERVIEW (left half) ---
   let mouseInMainViewport = event.clientX > viewportWidth;
-  if (isPortrait) {
+  if (settings.isPortrait) {
     mouseInMainViewport = event.clientY > viewportHeight;
   }
-  if (mouseInMainViewport || collapseOverview) {
+  if (mouseInMainViewport || settings.collapseOverview) {
     // convert mouse to NDC for right viewport
-    let rightOffset = viewportWidth + 2 * settings.misc.gap;
+    let rightOffset = viewportWidth + 2 * config.misc.gap;
     let topOffset = 0;
-    if (collapseOverview){
-      rightOffset = 2 * settings.misc.gap;
+    if (settings.collapseOverview){
+      rightOffset = 2 * config.misc.gap;
     }
-    if (isPortrait) {
+    if (settings.isPortrait) {
       rightOffset = 0;
-      topOffset = viewportHeight + 2 * settings.misc.gap;
-      if (collapseOverview){
-        topOffset = 2 * settings.misc.gap;
+      topOffset = viewportHeight + 2 * config.misc.gap;
+      if (settings.collapseOverview){
+        topOffset = 2 * config.misc.gap;
       }
     }
     mouse.x = ((event.clientX - rightOffset) / viewportWidth) * 2 - 1;
     mouse.y = (-(event.clientY - topOffset) / viewportHeight) * 2 + 1;
 
     // raycast against main scene using main camera
-    raycaster.setFromCamera(mouse, mainCamera);
-    const intersects = raycaster.intersectObjects(mainScene.children, true);
+    raycaster.setFromCamera(mouse, cameras.main);
+    const intersects = raycaster.intersectObjects(scenes.main.children, true);
     if (!intersects.length) return;
 
     for (const inter of intersects) {
@@ -270,7 +273,7 @@ window.addEventListener('click', (event) => {
         fetch(`http://127.0.0.1:8000/reset_switches?node_id=${inter.object.userData.id}`, { method: 'POST' })
           .then(res => res.json())
           .then(data => {
-            update_network(data);
+            updateNetwork(settings, scenes, cameras, data, state, controls, { onToggle });
           })
           .catch(err => console.error('reset_switches failed', err));
         return;
@@ -282,7 +285,7 @@ window.addEventListener('click', (event) => {
   // --- 2. Convert mouse position to NDC for LEFT viewport ---
   let overviewWidth = W / 2
   let overviewHeight = H;
-  if (isPortrait) {
+  if (settings.isPortrait) {
     overviewWidth = W;
     overviewHeight = H / 2;
   }
@@ -290,7 +293,7 @@ window.addEventListener('click', (event) => {
   mouse.y = (-(event.clientY / overviewHeight) * 2 + 1);
 
   // --- 3. Raycast from overview camera ---
-  raycaster.setFromCamera(mouse, overviewCamera);
+  raycaster.setFromCamera(mouse, cameras.overview);
 
   // --- 4. Intersect ray with the z=0 plane (region of the overview) ---
   const planeZ0 = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
@@ -341,7 +344,7 @@ function attachToggleEvents(el) {
 
 function show_new_network() {
   fetch('http://127.0.0.1:8000/reset_network', { method: 'POST' }).then(response => response.json()).then(data => {
-    update_network(data);
+    updateNetwork(settings, scenes, cameras, data, state, controls, { onToggle });
     const newNetworkBtn = document.getElementById("newNetworkBtn");
     newNetworkBtn.disabled = false;
     newNetworkBtn.textContent = "new Network";
@@ -350,7 +353,7 @@ function show_new_network() {
 
 function next_level() {
   fetch('http://127.0.0.1:8000/next_level', { method: 'POST' }).then(response => response.json()).then(data => {
-    update_network(data);
+    updateNetwork(settings, scenes, cameras, data, state, controls, { onToggle });
     const solvedOverlay = document.getElementById("solvedOverlay");
     if (solvedOverlay) {
       solvedOverlay.remove();
@@ -367,161 +370,63 @@ function next_level() {
 
 const collapseOverviewBtn = document.getElementById("collapseOverviewBtn");
 collapseOverviewBtn.addEventListener("click", () => {
-  collapseOverview = !collapseOverview;
+  settings.collapseOverview = !settings.collapseOverview;
   const labelsOverviewDiv = document.getElementById('labelsOverview');
   const labelsMainDiv = document.getElementById('labelsMain');
-  if (collapseOverview) {
-    overviewScene.remove(state.overviewNetwork);
+  if (settings.collapseOverview) {
+    scenes.overview.remove(state.overviewNetwork);
     labelRendererOverview.domElement.style.display = 'none';
-    if (isPortrait) {
+    if (settings.isPortrait) {
       collapseOverviewBtn.textContent = "⯆";
       collapseOverviewBtn.style.top = "10px";
-      viewportHeight = H - 2 * settings.misc.gap;
+      viewportHeight = H - 2 * config.misc.gap;
       viewportWidth = W;
       labelsOverviewDiv.style.height = viewportHeight + 'px';
       labelsMainDiv.style.height = viewportHeight + 'px';
-      labelsMainDiv.style.top = 2 * settings.misc.gap + 'px';
+      labelsMainDiv.style.top = 2 * config.misc.gap + 'px';
     } else {
       collapseOverviewBtn.textContent = "⯈";
       collapseOverviewBtn.style.left = "10px";
-      viewportWidth = W - 2 * settings.misc.gap;
+      viewportWidth = W - 2 * config.misc.gap;
       viewportHeight = H;
       labelsOverviewDiv.style.width = viewportWidth + 'px';
       labelsMainDiv.style.width = viewportWidth + 'px';
     }
   } else {
-    overviewScene.add(state.overviewNetwork);
+    scenes.overview.add(state.overviewNetwork);
     labelRendererOverview.domElement.style.display = 'block';
-    if (isPortrait) {
+    if (settings.isPortrait) {
       collapseOverviewBtn.textContent = "⯅";
       collapseOverviewBtn.style.top = "50%";
       viewportWidth = W;
-      viewportHeight = 0.5 * H - settings.misc.gap;
+      viewportHeight = 0.5 * H - config.misc.gap;
       labelsOverviewDiv.style.height = viewportHeight + 'px';
       labelsMainDiv.style.height = viewportHeight + 'px';
-      labelsMainDiv.style.top = (viewportHeight + 2 * settings.misc.gap) + 'px';
+      labelsMainDiv.style.top = (viewportHeight + 2 * config.misc.gap) + 'px';
     } else {
       collapseOverviewBtn.textContent = "⯇";
       collapseOverviewBtn.style.left = "50%";
-      viewportWidth = 0.5 * W - settings.misc.gap;
+      viewportWidth = 0.5 * W - config.misc.gap;
       viewportHeight = H;
       labelsOverviewDiv.style.width = viewportWidth + 'px';
       labelsMainDiv.style.width = viewportWidth + 'px';
     }
   }
   labelRendererMain.setSize(viewportWidth, viewportHeight);
-  aspect = viewportWidth / viewportHeight;
-  mainCamera.left = -d * aspect * 0.3;
-  mainCamera.right = d * aspect * 0.3;
-  mainCamera.top = d * 0.3;
-  mainCamera.bottom = -d * 0.3;
-  mainCamera.updateProjectionMatrix();
+  settings.aspect = viewportWidth / viewportHeight;
+  cameras.main.left = -d * settings.aspect * 0.3;
+  cameras.main.right = d * settings.aspect * 0.3;
+  cameras.main.top = d * 0.3;
+  cameras.main.bottom = -d * 0.3;
+  cameras.main.updateProjectionMatrix();
 });
-
-function update_network(data) {
-  if (state.mainNetwork) {
-    mainScene.remove(state.mainNetwork);
-  }
-  if (state.overviewNetwork) {
-    overviewScene.remove(state.overviewNetwork);
-  }
-  state.mainNetwork = createNetwork(data, state, controls, { onToggle });
-  state.overviewNetwork = state.mainNetwork.clone();
-  overviewScene.add(state.overviewNetwork);
-  mainScene.add(state.mainNetwork);
-
-  // Center overview camera on network
-  const max_x = Math.max(...Object.values(data.nodes).map(n => n.x));
-  const min_x = Math.min(...Object.values(data.nodes).map(n => n.x));
-  const max_y = Math.max(...Object.values(data.nodes).map(n => n.y));
-  const min_y = Math.min(...Object.values(data.nodes).map(n => n.y));
-  const center_x = (max_x + min_x) / 2;
-  const center_y = (max_y + min_y) / 2;
-  let size_x = (max_x - min_x) * 1.2;
-  let size_y = (max_y - min_y) * 1.2;
-  if (size_x > size_y * aspect) {
-    size_y = size_x / aspect;
-  } else {
-    size_x = size_y * aspect;
-  }
-  overviewCamera.left = -size_x / 2;
-  overviewCamera.right = size_x / 2;
-  overviewCamera.top = size_y / 2;
-  overviewCamera.bottom = -size_y / 2;
-  overviewCamera.position.set(center_x, center_y, 500);
-  overviewCamera.lookAt(center_x, center_y, 0);
-  overviewCamera.updateProjectionMatrix();
-
-  // Update level indicator
-  const levelIndicator = document.getElementById('LevelInfoPanel');
-  if (data.level === null) {
-    levelIndicator.textContent = `Custom Network`;
-  } else {
-    levelIndicator.textContent = `Level ${data.level}`;
-  }
-
-  if (data.cost === 0.0) {
-    if (!document.getElementById('solvedOverlay')) {
-      const overlay = document.createElement('div');
-      overlay.id = 'solvedOverlay';
-      overlay.className = 'ui-element';
-      Object.assign(overlay.style, {
-        position: 'fixed',
-        left: '50%',
-        top: '50%',
-        transform: 'translate(-50%, -50%)',
-        background: 'rgba(0, 0, 0, 0.8)',
-        padding: '24px 32px',
-        borderRadius: '8px',
-        textAlign: 'center',
-        zIndex: '9999',
-        color: '#ffffff',
-        fontFamily: 'Arial, sans-serif',
-        pointerEvents: 'auto'
-      });
-
-      const text = document.createElement('div');
-      text.textContent = 'Solved !';
-      Object.assign(text.style, {
-        fontSize: '48px',
-        fontWeight: '700',
-        marginBottom: '16px',
-        lineHeight: '1'
-      });
-
-      const btn = document.createElement('button');
-      btn.id = 'nextLevelBtn';
-      btn.textContent = 'Next Level';
-      Object.assign(btn.style, {
-        padding: '10px 20px',
-        fontSize: '16px',
-        borderRadius: '6px',
-        border: 'none',
-        cursor: 'pointer',
-        background: '#2196F3',
-        color: '#fff'
-      });
-
-      btn.addEventListener('click', () => {
-        const nextLevelBtn = document.getElementById("nextLevelBtn");
-        nextLevelBtn.disabled = true;
-        nextLevelBtn.textContent = "Loading...";
-        next_level();
-      });
-
-      overlay.appendChild(text);
-      overlay.appendChild(btn);
-      document.body.appendChild(overlay);
-    }
-  }
-}
 
 window.addEventListener('keydown', (event) => {
   if (event.key === 's' || event.key === 'S') {
     fetch('http://127.0.0.1:8000/solve', { method: 'POST' })
       .then(response => response.json())
       .then(data => {
-        update_network(data);
+        updateNetwork(settings, scenes, cameras, data, state, controls, { onToggle });
       })
       .catch(err => console.error('solve failed', err));
   }
@@ -533,6 +438,6 @@ function onToggle(switchID) {
   })
     .then(res => res.json())
     .then(data => {
-      update_network(data);
+      updateNetwork(settings, scenes, cameras, data, state, controls, { onToggle });
     });
 }
