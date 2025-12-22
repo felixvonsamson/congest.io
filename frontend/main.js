@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import { settings } from "./settings.js";
 
+// --- Settings ---
 let collapseOverview = false;
 let isPortrait = window.innerHeight > window.innerWidth;
 const W = window.innerWidth;
@@ -13,15 +14,19 @@ if (isPortrait) {
   viewportWidth = W;
   viewportHeight = 0.5 * H - settings.misc.gap;
 }
+let newCamPosition = null;
+let newControlTarget = null;
 
 // --- Objects ---
-let particles = [];
-let mainNetwork = null;
-let overviewNetwork = null;
 let cameraRect = null;
-
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
+const state = {
+  mainNetwork: null,
+  overviewNetwork: null,
+  particles: [],
+  particleMeshes: []
+};
 
 // --- Create the overview and main scene with camera and renderer ---
 const overviewScene = new THREE.Scene();
@@ -31,13 +36,11 @@ mainScene.background = new THREE.Color(settings.colors.background);
 
 let aspect = viewportWidth / viewportHeight;
 const d = 400;  // size of view volume
-
 const overviewCamera = new THREE.OrthographicCamera(
   -d * aspect, d * aspect,   // left, right
   d, -d                    // top, bottom
 );
 overviewCamera.up.set(0, 1, 0);
-
 const mainCamera = new THREE.OrthographicCamera(
   -d * aspect * 0.3, d * aspect * 0.3,   // left, right
   d * 0.3, -d * 0.3                      // top, bottom
@@ -49,18 +52,56 @@ mainCamera.lookAt(250, 250, 0);
 const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('webgl'), antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 
-// --- Label renderer ---
+// --- Label renderers ---
 const labelsMain = new THREE.Group();
 const labelsOverview = new THREE.Group();
-
 const labelRendererOverview = new CSS2DRenderer();
 const labelRendererMain = new CSS2DRenderer();
-// Overview (top)
 labelRendererOverview.setSize(viewportWidth, viewportHeight);
-// Main (bottom)
 labelRendererMain.setSize(viewportWidth, viewportHeight);
 document.getElementById('labelsOverview').appendChild(labelRendererOverview.domElement);
 document.getElementById('labelsMain').appendChild(labelRendererMain.domElement);
+
+// --- Shared geometries & materials ---
+const particleGeometry = (() => {
+  const shape = new THREE.Shape();
+  shape.absarc(0, 0, settings.sizes.particleRadius);
+  return new THREE.ShapeGeometry(shape, 16);
+})();
+const baseParticleMaterial = new THREE.MeshBasicMaterial({ 
+  color: 0xffff00, 
+  side: THREE.DoubleSide, 
+  depthWrite: false 
+});
+
+const nodeGeometry = (() => {
+  const shape = new THREE.Shape();
+  shape.absarc(0, 0, settings.sizes.nodeRadius);
+  return new THREE.ShapeGeometry(shape, 32);
+})();
+const nodeProdMaterial = new THREE.MeshBasicMaterial({ 
+  color: settings.colors.nodeProd, 
+  side: THREE.DoubleSide, 
+  depthWrite: false 
+});
+const nodeConsMaterial = new THREE.MeshBasicMaterial({ 
+  color: settings.colors.nodeCons, 
+  side: THREE.DoubleSide, 
+  depthWrite: false 
+});
+const bNodeGeometry = (() => {
+  const shape = new THREE.Shape();
+  shape.absarc(0, 0, settings.sizes.ringRadiusOuter);
+  const holePath = new THREE.Path();
+  holePath.absarc(0, 0, settings.sizes.ringRadiusInner);
+  shape.holes.push(holePath);
+  return new THREE.ShapeGeometry(shape, 32);
+})();
+const bNodeMaterial = new THREE.MeshBasicMaterial({
+  color: 0xffffff,
+  side: THREE.DoubleSide,
+  depthWrite: false
+});
 
 // --- Controls ---
 const inputEl = document.getElementById('labelsMain');
@@ -69,6 +110,7 @@ controls.enableRotate = false;  // no rotation
 controls.target.set(250, 250, 0);
 controls.update();
 
+// --- Camera rectangle in overview ---
 const rectangleGeometry = new THREE.BufferGeometry();
 const rectWidth = mainCamera.right - mainCamera.left;
 const rectHeight = mainCamera.top - mainCamera.bottom;
@@ -85,9 +127,10 @@ cameraRect = new THREE.Line(rectangleGeometry, rectangleMaterial);
 cameraRect.position.copy(controls.target);
 overviewScene.add(cameraRect);
 
+// --- Update collapse button symbol ---
 if (isPortrait) {
   document.getElementById('collapseOverviewBtn').textContent = "⯅";
-}createNetwork
+}
 
 // --- Fetch network data ---
 async function fetchNetwork() {
@@ -99,10 +142,10 @@ async function fetchNetwork() {
 function createNetwork(data) {
   labelsMain.clear();
   labelsOverview.clear();
-  particles = [];
+  state.particles = [];
   const networkGroup = new THREE.Group();
 
-  Object.entries(data.lines).forEach(([, line]) => {
+  Object.values(data.lines).forEach(line => {
     const from = data.nodes[line.from_node];
     const to = data.nodes[line.to_node];
 
@@ -126,7 +169,7 @@ function createNetwork(data) {
       const particleGeometry = new THREE.ShapeGeometry(particleShape, 16);
       const particleMaterial = new THREE.MeshBasicMaterial({ color: 0xffff00, side: THREE.DoubleSide, depthWrite: false });
       const particle = new THREE.Mesh(particleGeometry, particleMaterial);
-      particle.userData = { 
+      particle.userData.state = { 
         from: points[0], 
         to: points[1], 
         from_green: from.id.includes('b'),
@@ -134,7 +177,7 @@ function createNetwork(data) {
         speed: line.flow / line_length * 2, 
         t: i / n_particles 
       };
-      particles.push(particle.userData);
+      state.particles.push(particle.userData.state);
       networkGroup.add(particle);
     }
 
@@ -237,10 +280,23 @@ fetchNetwork().then(data => {
 
 function animate() {
   requestAnimationFrame(animate);
+  if(newCamPosition && newControlTarget) {
+    // Smoothly interpolate camera position and control target
+    mainCamera.position.lerp(newCamPosition, 0.2);
+    controls.target.lerp(newControlTarget, 0.2);
+    // If close enough, snap to target
+    if (mainCamera.position.distanceTo(newCamPosition) < 0.1 &&
+        controls.target.distanceTo(newControlTarget) < 0.1) {
+      mainCamera.position.copy(newCamPosition);
+      controls.target.copy(newControlTarget);
+      newCamPosition = null;
+      newControlTarget = null;
+    }
+  }
   controls.update();
 
   // Animate flow particles and update labels
-  for (const p of particles) {
+  for (const p of state.particles) {
     if (p.t !== undefined) {
       p.t += p.speed * 0.01;
       if (p.t > 1) p.t = 0;
@@ -248,8 +304,8 @@ function animate() {
     }
   }
 
-  updateParticlesInGroup(mainNetwork, particles);
-  updateParticlesInGroup(overviewNetwork, particles);
+  updateParticlesInGroup(state.mainNetwork, state.particles);
+  updateParticlesInGroup(state.overviewNetwork, state.particles);
 
   const W = window.innerWidth;
   const H = window.innerHeight;
@@ -308,20 +364,20 @@ function updateParticlesInGroup(group, states) {
   if (!group) return;
 
   group.traverse(obj => {
-    if (obj.isMesh && obj.userData?.t !== undefined) {
+    if (obj.isMesh && obj.userData?.state?.t !== undefined) {
       obj.position.lerpVectors(
         states[i].from,
         states[i].to,
         states[i].t
       );
       if (states[i].from_green && states[i].to_green) {
-        obj.material.color.setHSL(0.37, 1, 0.4);
+        obj.material.color.setHSL(0.14, 1, 1);
       } else if (states[i].to_green) {
-        obj.material.color.setHSL(0.12 + 0.25 * states[i].t, 1, 0.4);
+        obj.material.color.setHSL(0.14, 1, 0.5 + 0.5 * states[i].t);
       } else if (states[i].from_green) {
-        obj.material.color.setHSL(0.37 - 0.25 * states[i].t, 1, 0.4);
+        obj.material.color.setHSL(0.14, 1, 1 - 0.5 * states[i].t);
       } else {
-        obj.material.color.setHSL(0.12, 1, 0.4);
+        obj.material.color.setHSL(0.14, 1, 0.5);
       }
       i++;
     }
@@ -420,9 +476,8 @@ window.addEventListener('click', (event) => {
 
 function focusMainCamera(target) {
   const offset = new THREE.Vector3(0, 0, 200);
-  const newPosition = target.clone().add(offset);
-  mainCamera.position.copy(newPosition);
-  controls.target.copy(target);
+  newCamPosition = target.clone().add(offset);
+  newControlTarget = target;
   controls.update();
 }
 
@@ -487,7 +542,7 @@ collapseOverviewBtn.addEventListener("click", () => {
   const labelsOverviewDiv = document.getElementById('labelsOverview');
   const labelsMainDiv = document.getElementById('labelsMain');
   if (collapseOverview) {
-    overviewScene.remove(overviewNetwork);
+    overviewScene.remove(state.overviewNetwork);
     labelRendererOverview.domElement.style.display = 'none';
     if (isPortrait) {
       collapseOverviewBtn.textContent = "⯆";
@@ -506,7 +561,7 @@ collapseOverviewBtn.addEventListener("click", () => {
       labelsMainDiv.style.width = viewportWidth + 'px';
     }
   } else {
-    overviewScene.add(overviewNetwork);
+    overviewScene.add(state.overviewNetwork);
     labelRendererOverview.domElement.style.display = 'block';
     if (isPortrait) {
       collapseOverviewBtn.textContent = "⯅";
@@ -535,16 +590,16 @@ collapseOverviewBtn.addEventListener("click", () => {
 });
 
 function update_network(data) {
-  if (mainNetwork) {
-    mainScene.remove(mainNetwork);
+  if (state.mainNetwork) {
+    mainScene.remove(state.mainNetwork);
   }
-  if (overviewNetwork) {
-    overviewScene.remove(overviewNetwork);
+  if (state.overviewNetwork) {
+    overviewScene.remove(state.overviewNetwork);
   }
-  mainNetwork = createNetwork(data);
-  overviewNetwork = mainNetwork.clone();
-  overviewScene.add(overviewNetwork);
-  mainScene.add(mainNetwork);
+  state.mainNetwork = createNetwork(data, state);
+  state.overviewNetwork = state.mainNetwork.clone();
+  overviewScene.add(state.overviewNetwork);
+  mainScene.add(state.mainNetwork);
 
   // Center overview camera on network
   const max_x = Math.max(...Object.values(data.nodes).map(n => n.x));

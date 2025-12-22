@@ -15,4 +15,11 @@ export const settings = {
     ringRadiusInner: 9,
     particleRadius: 1.5,
   },
+  render_order: {
+    lines: 1,
+    bNodes: 2,
+    particles: 3,
+    nodes: 4,
+    labels: 5,
+  },
 };
