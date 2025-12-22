@@ -11,8 +11,8 @@ export const settings = {
   },
   sizes: {
     nodeRadius: 7,
-    ringRadiusOuter: 11,
-    ringRadiusInner: 9,
+    ringRadiusOuter: 10.5,
+    ringRadiusInner: 8.5,
     particleRadius: 1.5,
   },
   render_order: {

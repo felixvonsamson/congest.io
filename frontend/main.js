@@ -3,6 +3,8 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import { settings } from "./settings.js";
 
+import { createNetwork } from './network/createNetwork.js';
+
 // --- Settings ---
 let collapseOverview = false;
 let isPortrait = window.innerHeight > window.innerWidth;
@@ -24,6 +26,8 @@ const mouse = new THREE.Vector2();
 const state = {
   mainNetwork: null,
   overviewNetwork: null,
+  labelsOverview: null,
+  labelsMain: null,
   particles: [],
   particleMeshes: []
 };
@@ -53,55 +57,14 @@ const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('webg
 renderer.setSize(window.innerWidth, window.innerHeight);
 
 // --- Label renderers ---
-const labelsMain = new THREE.Group();
-const labelsOverview = new THREE.Group();
+state.labelsMain = new THREE.Group();
+state.labelsOverview = new THREE.Group();
 const labelRendererOverview = new CSS2DRenderer();
 const labelRendererMain = new CSS2DRenderer();
 labelRendererOverview.setSize(viewportWidth, viewportHeight);
 labelRendererMain.setSize(viewportWidth, viewportHeight);
 document.getElementById('labelsOverview').appendChild(labelRendererOverview.domElement);
 document.getElementById('labelsMain').appendChild(labelRendererMain.domElement);
-
-// --- Shared geometries & materials ---
-const particleGeometry = (() => {
-  const shape = new THREE.Shape();
-  shape.absarc(0, 0, settings.sizes.particleRadius);
-  return new THREE.ShapeGeometry(shape, 16);
-})();
-const baseParticleMaterial = new THREE.MeshBasicMaterial({ 
-  color: 0xffff00, 
-  side: THREE.DoubleSide, 
-  depthWrite: false 
-});
-
-const nodeGeometry = (() => {
-  const shape = new THREE.Shape();
-  shape.absarc(0, 0, settings.sizes.nodeRadius);
-  return new THREE.ShapeGeometry(shape, 32);
-})();
-const nodeProdMaterial = new THREE.MeshBasicMaterial({ 
-  color: settings.colors.nodeProd, 
-  side: THREE.DoubleSide, 
-  depthWrite: false 
-});
-const nodeConsMaterial = new THREE.MeshBasicMaterial({ 
-  color: settings.colors.nodeCons, 
-  side: THREE.DoubleSide, 
-  depthWrite: false 
-});
-const bNodeGeometry = (() => {
-  const shape = new THREE.Shape();
-  shape.absarc(0, 0, settings.sizes.ringRadiusOuter);
-  const holePath = new THREE.Path();
-  holePath.absarc(0, 0, settings.sizes.ringRadiusInner);
-  shape.holes.push(holePath);
-  return new THREE.ShapeGeometry(shape, 32);
-})();
-const bNodeMaterial = new THREE.MeshBasicMaterial({
-  color: 0xffffff,
-  side: THREE.DoubleSide,
-  depthWrite: false
-});
 
 // --- Controls ---
 const inputEl = document.getElementById('labelsMain');
@@ -137,140 +100,6 @@ async function fetchNetwork() {
   const response = await fetch('http://127.0.0.1:8000/network_state');
   const data = await response.json();
   return data;
-}
-
-function createNetwork(data) {
-  labelsMain.clear();
-  labelsOverview.clear();
-  state.particles = [];
-  const networkGroup = new THREE.Group();
-
-  Object.values(data.lines).forEach(line => {
-    const from = data.nodes[line.from_node];
-    const to = data.nodes[line.to_node];
-
-    // Base line
-    const color = Math.abs(line.flow) > line.limit ? settings.colors.lineOverload : settings.colors.line;
-    const material = new THREE.LineBasicMaterial({ color });
-    const points = [
-      new THREE.Vector3(from.x, from.y, 0),
-      new THREE.Vector3(to.x, to.y, 0)
-    ];
-    const geometry = new THREE.BufferGeometry().setFromPoints(points);
-    const lineMesh = new THREE.Line(geometry, material);
-    networkGroup.add(lineMesh);
-
-    // Moving particle along the line
-    let line_length = points[0].distanceTo(points[1]);
-    let n_particles = Math.max(1, Math.floor(line_length / 10));
-    for (let i = 0; i < n_particles; i++) {
-      const particleShape = new THREE.Shape();
-      particleShape.absarc(0, 0, settings.sizes.particleRadius);
-      const particleGeometry = new THREE.ShapeGeometry(particleShape, 16);
-      const particleMaterial = new THREE.MeshBasicMaterial({ color: 0xffff00, side: THREE.DoubleSide, depthWrite: false });
-      const particle = new THREE.Mesh(particleGeometry, particleMaterial);
-      particle.userData.state = { 
-        from: points[0], 
-        to: points[1], 
-        from_green: from.id.includes('b'),
-        to_green: to.id.includes('b'),
-        speed: line.flow / line_length * 2, 
-        t: i / n_particles 
-      };
-      state.particles.push(particle.userData.state);
-      networkGroup.add(particle);
-    }
-
-    // Flow magnitude label using CSS2DObject
-    const div = document.createElement('div');
-    div.className = 'label';
-    div.textContent = Math.abs(line.flow).toFixed(0);
-    div.style.color = 'yellow';
-    const label = new CSS2DObject(div);
-    label.position.set((from.x + to.x) / 2, (from.y + to.y) / 2, 0);
-    labelsMain.add(label);
-    labelsOverview.add(label.clone());
-
-    for (let end of ["from", "to"]) {
-      let type = "normal"
-      if (end === "from" && from.id.includes('b') || end === "to" && to.id.includes('b')) {
-        type = "b"
-      }
-      const toggleDiv = createToggle(type = type);
-      toggleDiv.dataset.lineNodeID = line.id + "_" + end;
-      toggleDiv.addEventListener('click', (event) => {
-        console.log('Toggle clicked for', event.currentTarget.dataset.lineNodeID);
-        const switchID = event.currentTarget.dataset.lineNodeID;
-        // Send switch request to server
-        fetch(`http://127.0.0.1:8000/switch_node?switch_id=${switchID}`, { method: 'POST' })
-          .then(response => response.json())
-          .then(data => {
-            update_network(data);
-          });
-      });
-      const toggle = new CSS2DObject(toggleDiv);
-      const v_from = new THREE.Vector3(from.x, from.y, 0);
-      const v_to = new THREE.Vector3(to.x, to.y, 0);
-      const v_dir = new THREE.Vector3().subVectors(v_to, v_from).normalize();
-      let v_pos;
-      if (end === "from") {
-        v_pos = v_from.clone().add(v_dir.clone().multiplyScalar(15));
-      } else {
-        v_pos = v_to.clone().add(v_dir.clone().multiplyScalar(-15));
-      }
-      toggle.position.set(v_pos.x, v_pos.y, 0);
-      labelsMain.add(toggle);
-    }
-  });
-
-  // Nodes
-  Object.entries(data.nodes).forEach(([id, node]) => {
-    if (id.includes('b')) {
-      // draw a circle with radius 7 border color white and width 2 and no fill
-      const nodeShape = new THREE.Shape();
-      nodeShape.absarc(node.x, node.y, settings.sizes.ringRadiusOuter);
-      const holePath = new THREE.Path();
-      holePath.absarc(node.x, node.y, settings.sizes.ringRadiusInner);
-      nodeShape.holes.push(holePath);
-      const nodeGeom = new THREE.ShapeGeometry(nodeShape, 32);
-      const material = new THREE.MeshBasicMaterial({
-        color: 0xffffff,
-        side: THREE.DoubleSide,
-        depthWrite: false
-      });
-      const nodeMesh = new THREE.Mesh(nodeGeom, material);
-      networkGroup.add(nodeMesh);
-    } else {
-      // regular node
-      const color = node.injection >= 0 ? settings.colors.nodeProd : settings.colors.nodeCons;
-      const nodeShape = new THREE.Shape();
-      nodeShape.absarc(node.x, node.y, settings.sizes.nodeRadius);
-      const nodeGeom = new THREE.ShapeGeometry(nodeShape, 32);
-      const material = new THREE.MeshBasicMaterial({
-        color: color,
-        side: THREE.DoubleSide,
-        depthWrite: false
-      });
-      const nodeMesh = new THREE.Mesh(nodeGeom, material);
-      nodeMesh.userData = { id: node.id };
-      networkGroup.add(nodeMesh);
-
-      // Node injection label using CSS2DObject
-      const divMain = document.createElement('div');
-      divMain.className = 'label';
-      divMain.textContent = node.injection.toFixed(0);
-      divMain.style.color = 'white';
-      const label = new CSS2DObject(divMain);
-      label.position.set(node.x, node.y, 0);
-      labelsMain.add(label);
-
-      const divOverview = divMain.cloneNode(true);
-      const labelOverview = new CSS2DObject(divOverview);
-      labelOverview.position.set(node.x, node.y, 0);
-      labelsOverview.add(labelOverview);
-    }
-  });
-  return networkGroup;
 }
 
 // --- Main ---
@@ -353,9 +182,9 @@ function animate() {
   }
   // --- Render MAIN labels into right half ---
   if (!collapseOverview) {
-    labelRendererOverview.render(labelsOverview, overviewCamera);
+    labelRendererOverview.render(state.labelsOverview, overviewCamera);
   }
-  labelRendererMain.render(labelsMain, mainCamera);
+  labelRendererMain.render(state.labelsMain, mainCamera);
 }
 animate();
 
@@ -596,7 +425,7 @@ function update_network(data) {
   if (state.overviewNetwork) {
     overviewScene.remove(state.overviewNetwork);
   }
-  state.mainNetwork = createNetwork(data, state);
+  state.mainNetwork = createNetwork(data, state, controls, { onToggle });
   state.overviewNetwork = state.mainNetwork.clone();
   overviewScene.add(state.overviewNetwork);
   mainScene.add(state.mainNetwork);
@@ -697,3 +526,13 @@ window.addEventListener('keydown', (event) => {
       .catch(err => console.error('solve failed', err));
   }
 });
+
+function onToggle(switchID) {
+  fetch(`http://127.0.0.1:8000/switch_node?switch_id=${switchID}`, {
+    method: 'POST'
+  })
+    .then(res => res.json())
+    .then(data => {
+      update_network(data);
+    });
+}
