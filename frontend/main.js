@@ -488,8 +488,8 @@ function createToggle(type = 'normal') {
   const div = document.createElement('div');
   div.className = 'line-toggle';
   div.style.backgroundColor = backgroundColor;
-  div.style.outline = `4px solid ${borderColor}`;
-  div.style.outlineOffset = '2px';
+  div.style.outline = `6px solid ${borderColor}`;
+  div.style.outlineOffset = '3px';
   attachToggleEvents(div);
   return div;
 }
