@@ -1,0 +1,5 @@
+fastapi[standard]
+pydantic
+numpy
+scipy
+uvicorn
