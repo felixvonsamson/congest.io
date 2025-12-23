@@ -267,6 +267,10 @@ def calculate_power_flow(network):
         A[i, ell] = 1
         A[j, ell] = -1
 
+    # Check if the network is fully connected
+    if np.linalg.matrix_rank(A) < n - 1:
+        return NetworkState(nodes=nodes, lines=lines, cost=float("nan"), level=network.level)
+
     # --- Build B = A * A^T (since X = 1) ---
     B = A @ A.T
 
@@ -296,9 +300,6 @@ def calculate_power_flow(network):
             flow=float(flows[ell]),
             limit=line.limit,
         )
-    # if all flows are zero, set cost to NaN to indicate unsolvable network state
-    if np.allclose(flows, 0.0):
-        return NetworkState(nodes=nodes, lines=updated_lines, cost=float("nan"), level=network.level)
 
     # Calculate cost as the sum overloads
     cost = sum(

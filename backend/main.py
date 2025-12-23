@@ -1,3 +1,5 @@
+from copy import deepcopy
+import math
 from fastapi import FastAPI
 import json
 from .network import (
@@ -26,19 +28,6 @@ app.add_middleware(
 # Global in-memory network (placeholder)
 level = 1
 network = load_level(level)
-
-
-@app.post("/change_node_topology")
-def change_node_topology(req: TopologyChangeRequest):
-    global network
-    network = update_network(network, req)
-    state = calculate_power_flow(network)
-    return state
-
-
-@app.get("/grid")
-def get_initial_grid():
-    return network
 
 
 @app.get("/network_state")
@@ -70,14 +59,17 @@ def switch_node(switch_id: str):
     line_id, direction = (switch_id.split("_")[0], switch_id.split("_")[1])
     if line_id not in network.lines:
         return {"error": "Invalid switch ID"}
-    network = update_network(
-        network,
+    new_state = update_network(
+        deepcopy(network),
         TopologyChangeRequest(
             line_id=line_id,
             direction=direction,
         ),
     )
-    network = calculate_power_flow(network)
+    new_state = calculate_power_flow(new_state)
+    if math.isnan(new_state.cost):
+        return {"error": "Switching this line creates an unsolvable network"}
+    network = new_state
     return network
 
 

@@ -87,6 +87,7 @@ rectangleGeometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3
 const rectangleMaterial = new THREE.LineBasicMaterial({ color: 'rgb(255, 150, 0)' });
 cameraRect = new THREE.Line(rectangleGeometry, rectangleMaterial);
 cameraRect.position.copy(controls.target);
+cameraRect.renderOrder = 10;  // render on top
 scenes.overview.add(cameraRect);
 
 // --- Update collapse button symbol ---
@@ -332,8 +333,20 @@ function onToggle(switchID) {
   })
     .then(res => res.json())
     .then(data => {
+      if (data.error) {
+        showErrorToast(data.error);
+        return;
+      }
       updateNetwork(settings, scenes, cameras, data, state, controls, { onToggle });
     });
+}
+
+function showErrorToast(message) {
+  const toast = document.createElement('div');
+  toast.className = 'error-toast';
+  toast.innerHTML = "<b>Action blocked:</b> This switch would cut off part of the grid.<br>Every node must remain connected to ensure power can flow through the system.";
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 4000);
 }
 
 document.getElementById('nextLevelBtn').addEventListener('click', () => {
