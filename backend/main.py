@@ -14,9 +14,10 @@ from .schemas import TopologyChangeRequest, update_network_from_file
 from fastapi.middleware.cors import CORSMiddleware
 import os
 from datetime import datetime
-
+from fastapi import APIRouter
 
 app = FastAPI()
+router = APIRouter(prefix="/api")
 
 app.add_middleware(
     CORSMiddleware,
@@ -31,21 +32,21 @@ level = 0
 network = load_level(tutorial, tutorial=True)
 
 
-@app.get("/network_state")
+@router.get("/network_state")
 def get_network_state():
     global network
     network = calculate_power_flow(network)
     return network
 
 
-@app.post("/reset_network")
+@router.post("/reset_network")
 def reset_network():
     global network
     network = generate_network()
     return network
 
 
-@app.post("/new_layout")
+@router.post("/new_layout")
 def get_new_layout():
     global network
     network = force_directed_layout(network, k=150.0)
@@ -53,7 +54,7 @@ def get_new_layout():
     return network
 
 
-@app.post("/switch_node")
+@router.post("/switch_node")
 def switch_node(switch_id: str):
     global network
     # switch_id has the format "L[from_id]-[to_id]_[from/to]"
@@ -74,7 +75,7 @@ def switch_node(switch_id: str):
     return network
 
 
-@app.post("/reset_switches")
+@router.post("/reset_switches")
 def reset_switches(node_id: str):
     global network
     for line in list(network.lines.values()):
@@ -98,14 +99,14 @@ def reset_switches(node_id: str):
     return network
 
 
-@app.post("/solve")
+@router.post("/solve")
 def solve_net():
     global network
     network = solve_network(network)
     return network
 
 
-@app.get("/save_network")
+@router.get("/save_network")
 def save_network():
     global network
     os.makedirs("saves", exist_ok=True)
@@ -116,7 +117,7 @@ def save_network():
     return {"status": "Network saved", "file": filepath}
 
 
-@app.get("/load_network")
+@router.get("/load_network")
 def load_network(file_path: str):
     global network
     network = update_network_from_file(file_path)
@@ -124,7 +125,7 @@ def load_network(file_path: str):
     return network
 
 
-@app.post("/next_level")
+@router.post("/next_level")
 def next_level():
     global level, tutorial, network
     print(f"Current level: {level}, tutorial: {tutorial}")
@@ -136,3 +137,6 @@ def next_level():
         level += 1
         network = load_level(level)
     return network
+
+
+app.include_router(router)

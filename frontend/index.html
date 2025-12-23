@@ -14,6 +14,12 @@
   <div id="labelsOverview"></div>
   <div id="labelsMain"></div>
   <div id="LevelInfoPanel" class="ui-element">Loading...</div>
+  <button id="helpBtn" aria-label="Help" class="ui-element">?</button>
+  <div id="helpPanel" class="ui-element">
+    <button id="closeHelpBtn" aria-label="Close help">✕</button>
+    <img src="./static/images/help.png" alt="Help" style="width:100%;max-height:80vh;object-fit:contain;">
+  </div>
+  
   <!-- <button id="newNetworkBtn" aria-label="Create new network" class="ui-element"
     style="position:fixed;left:12px;bottom:12px;z-index:1000;padding:8px 12px;border-radius:4px;background:#1976d2;color:#fff;border:none;box-shadow:0 2px 6px rgba(0,0,0,0.3);cursor:pointer;font-weight:600;">
     new Network
@@ -23,9 +29,19 @@
   </button>
   <div id="solvedOverlay" class="ui-element">
     <div id="solvedMessage">Solved!</div>
-    <button id="nextLevelBtn" aria-label="Next level">Next Level</button>
+
   </div>
   <div id="tutorialHelp" class = "ui-element"></div>
+
+  <script>
+    document.getElementById('helpBtn').addEventListener('click', () => {
+      document.getElementById('helpPanel').style.display = document.getElementById('helpPanel').style.display === 'none' ? 'block' : 'none';
+    });
+    document.getElementById('closeHelpBtn').addEventListener('click', () => {
+      document.getElementById('helpPanel').style.display = 'none';
+    });
+  </script>
+
 </body>
 
-</html>
+</html>    <button id="nextLevelBtn" aria-label="Next level">Next Level</button>
