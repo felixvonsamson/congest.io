@@ -14,10 +14,11 @@ export const config = {
     ringRadiusOuter: 10.5,
     ringRadiusInner: 8.5,
     particleRadius: 1.5,
+    lineWidth: 0.75,
   },
   render_order: {
-    lines: 1,
-    bNodes: 2,
+    bNodes: 1,
+    lines: 2,
     particles: 3,
     nodes: 4,
     labels: 5,

@@ -17,27 +17,41 @@ export function createNetwork(data, state, controls, callbacks) {
     const to = data.nodes[line.to_node];
 
     // Base line
+    const fromVector = new THREE.Vector3(from.x, from.y, 0);
+    const toVector = new THREE.Vector3(to.x, to.y, 0);
+    const direction = new THREE.Vector3().subVectors(toVector, fromVector);
+    const normalizedDirection = direction.clone().normalize().multiplyScalar(config.sizes.ringRadiusOuter);
+    if (from.id.includes('b')) {
+      fromVector.add(normalizedDirection)
+    }
+    if (to.id.includes('b')) {
+      toVector.sub(normalizedDirection);
+    }
+    const lineLength = fromVector.distanceTo(toVector);
+    const center = new THREE.Vector3().addVectors(fromVector, toVector).multiplyScalar(0.5);
+    const angle = Math.atan2(direction.y, direction.x);
+    const geometry = new THREE.PlaneGeometry(lineLength, config.sizes.lineWidth);
     const material = new THREE.LineBasicMaterial({
       color: Math.abs(line.flow) > line.limit
         ? config.colors.lineOverload
         : config.colors.line
     });
-    const points = [
-        new THREE.Vector3(from.x, from.y, 0),
-        new THREE.Vector3(to.x, to.y, 0)
-    ];
-    const geometry = new THREE.BufferGeometry().setFromPoints(points);
-    group.add(new THREE.Line(geometry, material));
+    const lineRect = new THREE.Mesh(geometry, material);
+    lineRect.position.copy(center);
+    lineRect.rotation.z = angle;
+    lineRect.renderOrder = config.render_order.lines;
+    group.add(lineRect);
 
     // Moving particle along the line
-    let length = points[0].distanceTo(points[1]);
+    let length = fromVector.distanceTo(toVector);
     const n = Math.max(1, Math.floor(length / 10));
 
     for (let i = 0; i < n; i++) {
-      const mesh = createParticle(from, to, line.flow / length * 2, i / n);
-      group.add(mesh);
-      state.particleMeshes.push(mesh);
-      state.particles.push(mesh.userData.state);
+        const mesh = createParticle(from, to, fromVector, toVector, line.flow / length * 2, i / n);
+        mesh.renderOrder = config.render_order.particles;
+        group.add(mesh);
+        state.particleMeshes.push(mesh);
+        state.particles.push(mesh.userData.state);
     }
 
     // Flow magnitude label using CSS2DObject
@@ -119,7 +133,7 @@ const particleGeometry = (() => {
   return new THREE.ShapeGeometry(shape, 16);
 })();
 
-function createParticle(from, to, speed, t0) {
+function createParticle(from, to, fromVector, toVector, speed, t0) {
   const material = new THREE.MeshBasicMaterial({
     color: 0xffff00,
     side: THREE.DoubleSide,
@@ -129,8 +143,8 @@ function createParticle(from, to, speed, t0) {
   const mesh = new THREE.Mesh(particleGeometry, material);
 
   mesh.userData.state = {
-    from: new THREE.Vector3(from.x, from.y, 0),
-    to: new THREE.Vector3(to.x, to.y, 0),
+    from: fromVector,
+    to: toVector,
     from_b: from.id.includes('b'),
     to_b: to.id.includes('b'),
     t: t0,
