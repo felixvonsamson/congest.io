@@ -105,6 +105,11 @@ async function fetchNetwork() {
 // --- Main ---
 fetchNetwork().then(data => {
   updateNetwork(settings, scenes, cameras, data, state, controls, { onToggle });
+  // Show help screen on first tutorial level
+  const helpPanel = document.getElementById("helpPanel");
+  if (data.tutorial && data.level === 1 && data.cost > 0.0) {
+    helpPanel.style.display = "block";
+  }
 });
 
 function animate() {

@@ -41,7 +41,7 @@ export function updateNetwork(
     cameras.overview.lookAt(center_x, center_y, 0);
     cameras.overview.updateProjectionMatrix();
 
-    // Update level indicator
+  // Update level indicator
   const levelIndicator = document.getElementById('LevelInfoPanel');
   if (data.level === null) {
     levelIndicator.textContent = `Custom Network`;
