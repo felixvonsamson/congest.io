@@ -97,7 +97,7 @@ if (settings.isPortrait) {
 
 // --- Fetch network data ---
 async function fetchNetwork() {
-  const response = await fetch('http://127.0.0.1:8000/network_state');
+  const response = await fetch('/api/network_state');
   const data = await response.json();
   return data;
 }
@@ -216,7 +216,7 @@ window.addEventListener('click', (event) => {
     for (const inter of intersects) {
       if (inter.object.userData && inter.object.userData.id) {
         // call reset endpoint for that node
-        fetch(`http://127.0.0.1:8000/reset_switches?node_id=${inter.object.userData.id}`, { method: 'POST' })
+        fetch(`/api/reset_switches?node_id=${inter.object.userData.id}`, { method: 'POST' })
           .then(res => res.json())
           .then(data => {
             updateNetwork(settings, scenes, cameras, data, state, controls, { onToggle });
@@ -252,7 +252,7 @@ function focusMainCamera(target) {
 }
 
 function show_new_network() {
-  fetch('http://127.0.0.1:8000/reset_network', { method: 'POST' }).then(response => response.json()).then(data => {
+  fetch('/api/reset_network', { method: 'POST' }).then(response => response.json()).then(data => {
     updateNetwork(settings, scenes, cameras, data, state, controls, { onToggle });
     const newNetworkBtn = document.getElementById("newNetworkBtn");
     newNetworkBtn.disabled = false;
@@ -261,7 +261,7 @@ function show_new_network() {
 }
 
 function next_level() {
-  fetch('http://127.0.0.1:8000/next_level', { method: 'POST' }).then(response => response.json()).then(data => {
+  fetch('/api/next_level', { method: 'POST' }).then(response => response.json()).then(data => {
     updateNetwork(settings, scenes, cameras, data, state, controls, { onToggle });
     const nextLevelBtn = document.getElementById("nextLevelBtn");
     nextLevelBtn.disabled = false;
@@ -318,7 +318,7 @@ collapseOverviewBtn.addEventListener("click", () => {
 
 window.addEventListener('keydown', (event) => {
   if (event.key === 's' || event.key === 'S') {
-    fetch('http://127.0.0.1:8000/solve', { method: 'POST' })
+    fetch('/api/solve', { method: 'POST' })
       .then(response => response.json())
       .then(data => {
         updateNetwork(settings, scenes, cameras, data, state, controls, { onToggle });
@@ -328,7 +328,7 @@ window.addEventListener('keydown', (event) => {
 });
 
 function onToggle(switchID) {
-  fetch(`http://127.0.0.1:8000/switch_node?switch_id=${switchID}`, {
+  fetch(`/api/switch_node?switch_id=${switchID}`, {
     method: 'POST'
   })
     .then(res => res.json())
