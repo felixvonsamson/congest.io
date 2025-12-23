@@ -49,58 +49,12 @@ export function updateNetwork(
     levelIndicator.textContent = `Level ${data.level}`;
   }
 
-  if (data.cost === 0.0) {
-    if (!document.getElementById('solvedOverlay')) {
-      const overlay = document.createElement('div');
-      overlay.id = 'solvedOverlay';
-      overlay.className = 'ui-element';
-      Object.assign(overlay.style, {
-        position: 'fixed',
-        left: '50%',
-        top: '50%',
-        transform: 'translate(-50%, -50%)',
-        background: 'rgba(0, 0, 0, 0.8)',
-        padding: '24px 32px',
-        borderRadius: '8px',
-        textAlign: 'center',
-        zIndex: '9999',
-        color: '#ffffff',
-        fontFamily: 'Arial, sans-serif',
-        pointerEvents: 'auto'
-      });
-
-      const text = document.createElement('div');
-      text.textContent = 'Solved !';
-      Object.assign(text.style, {
-        fontSize: '48px',
-        fontWeight: '700',
-        marginBottom: '16px',
-        lineHeight: '1'
-      });
-
-      const btn = document.createElement('button');
-      btn.id = 'nextLevelBtn';
-      btn.textContent = 'Next Level';
-      Object.assign(btn.style, {
-        padding: '10px 20px',
-        fontSize: '16px',
-        borderRadius: '6px',
-        border: 'none',
-        cursor: 'pointer',
-        background: '#2196F3',
-        color: '#fff'
-      });
-
-      btn.addEventListener('click', () => {
-        const nextLevelBtn = document.getElementById("nextLevelBtn");
-        nextLevelBtn.disabled = true;
-        nextLevelBtn.textContent = "Loading...";
-        next_level();
-      });
-
-      overlay.appendChild(text);
-      overlay.appendChild(btn);
-      document.body.appendChild(overlay);
+  const solvedOverlay = document.getElementById("solvedOverlay");
+  if (solvedOverlay) {
+    if (data.cost === 0.0) {
+        solvedOverlay.style.display = "block";
+    } else {
+        solvedOverlay.style.display = "none";
     }
   }
 }

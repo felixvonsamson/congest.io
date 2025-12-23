@@ -131,6 +131,8 @@ function createParticle(from, to, speed, t0) {
   mesh.userData.state = {
     from: new THREE.Vector3(from.x, from.y, 0),
     to: new THREE.Vector3(to.x, to.y, 0),
+    from_b: from.id.includes('b'),
+    to_b: to.id.includes('b'),
     t: t0,
     speed: speed
   };

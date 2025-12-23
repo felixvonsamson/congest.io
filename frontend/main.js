@@ -1,31 +1,27 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
-import { config } from "./config.js";
 
+import { config } from "./config.js";
 import { updateNetwork } from './network/updateNetwork.js';
+import { getViewports } from './ui/viewport_calculations.js';
 
 // --- Settings ---
-const W = window.innerWidth;
-const H = window.innerHeight;
-let viewportWidth = 0.5 * W - config.misc.gap;
-let viewportHeight = H;
-if (window.innerHeight > window.innerWidth) {
-  viewportWidth = W;
-  viewportHeight = 0.5 * H - config.misc.gap;
-}
 const settings = {
   collapseOverview: false,
-  isPortrait: window.innerHeight > window.innerWidth,
-  aspect: viewportWidth / viewportHeight,
+  isPortrait: null,
+  overview_viewport: null,
+  main_viewport: null,
+  aspect: null,
 };
+let vp = getViewports(settings);
 let newCamPosition = null;
 let newControlTarget = null;
 
 // --- Objects ---
 let cameraRect = null;
 const raycaster = new THREE.Raycaster();
-const mouse = new THREE.Vector2();
+let mouse = new THREE.Vector2();
 const state = {
   mainNetwork: null,
   overviewNetwork: null,
@@ -64,8 +60,8 @@ state.labelsMain = new THREE.Group();
 state.labelsOverview = new THREE.Group();
 const labelRendererOverview = new CSS2DRenderer();
 const labelRendererMain = new CSS2DRenderer();
-labelRendererOverview.setSize(viewportWidth, viewportHeight);
-labelRendererMain.setSize(viewportWidth, viewportHeight);
+labelRendererOverview.setSize(settings.overview_viewport.w, settings.overview_viewport.h);
+labelRendererMain.setSize(settings.main_viewport.w, settings.main_viewport.h);
 document.getElementById('labelsOverview').appendChild(labelRendererOverview.domElement);
 document.getElementById('labelsMain').appendChild(labelRendererMain.domElement);
 
@@ -95,7 +91,7 @@ scenes.overview.add(cameraRect);
 
 // --- Update collapse button symbol ---
 if (settings.isPortrait) {
-  document.getElementById('settings.collapseOverviewBtn').textContent = "⯅";
+  document.getElementById('collapseOverviewBtn').textContent = "⯅";
 }
 
 // --- Fetch network data ---
@@ -139,50 +135,19 @@ function animate() {
   updateParticlesInGroup(state.mainNetwork, state.particles);
   updateParticlesInGroup(state.overviewNetwork, state.particles);
 
-  const W = window.innerWidth;
-  const H = window.innerHeight;
-
-  if (settings.isPortrait) {
-    if (settings.collapseOverview) {
-      // --- Render only bottom interactive camera ---
-      renderer.setViewport(0, 0, viewportWidth, viewportHeight);
-      renderer.setScissor(0, 0, viewportWidth, viewportHeight);
-      renderer.setScissorTest(true);
-      renderer.render(scenes.main, cameras.main);
-    } else {
-      // --- Render top overview ---
-      renderer.setViewport(0, viewportHeight + 2 * config.misc.gap, viewportWidth, viewportHeight);
-      renderer.setScissor(0, viewportHeight + 2 * config.misc.gap, viewportWidth, viewportHeight);
+  if (!settings.collapseOverview) {
+      // --- Render overview ---
+      renderer.setViewport(settings.overview_viewport.x, settings.overview_viewport.y, settings.overview_viewport.w, settings.overview_viewport.h);
+      renderer.setScissor(settings.overview_viewport.x, settings.overview_viewport.y, settings.overview_viewport.w, settings.overview_viewport.h);
       renderer.setScissorTest(true);
       renderer.render(scenes.overview, cameras.overview);
-
-      // --- Render bottom interactive camera ---
-      renderer.setViewport(0, 0, viewportWidth, viewportHeight);
-      renderer.setScissor(0, 0, viewportWidth, viewportHeight);
-      renderer.setScissorTest(true);
-      renderer.render(scenes.main, cameras.main);
-    }
-  } else {
-    if (settings.collapseOverview) {
-      // --- Render only right interactive camera ---
-      renderer.setViewport(2 * config.misc.gap, 0, viewportWidth, viewportHeight);
-      renderer.setScissor(2 * config.misc.gap, 0, viewportWidth, viewportHeight);
-      renderer.setScissorTest(true);
-      renderer.render(scenes.main, cameras.main);
-    } else {
-      // --- Render left static overview ---
-      renderer.setViewport(0, 0, viewportWidth, viewportHeight);
-      renderer.setScissor(0, 0, viewportWidth, viewportHeight);
-      renderer.setScissorTest(true);
-      renderer.render(scenes.overview, cameras.overview);
-
-      // --- Render right interactive camera ---
-      renderer.setViewport(viewportWidth + 2 * config.misc.gap, 0, viewportWidth, viewportHeight);
-      renderer.setScissor(viewportWidth + 2 * config.misc.gap, 0, viewportWidth, viewportHeight);
-      renderer.setScissorTest(true);
-      renderer.render(scenes.main, cameras.main);
-    }
   }
+  // --- Render interactive camera ---
+  renderer.setViewport(settings.main_viewport.x, settings.main_viewport.y, settings.main_viewport.w, settings.main_viewport.h);
+  renderer.setScissor(settings.main_viewport.x, settings.main_viewport.y, settings.main_viewport.w, settings.main_viewport.h);
+  renderer.setScissorTest(true);
+  renderer.render(scenes.main, cameras.main);
+  
   // --- Render MAIN labels into right half ---
   if (!settings.collapseOverview) {
     labelRendererOverview.render(state.labelsOverview, cameras.overview);
@@ -202,11 +167,11 @@ function updateParticlesInGroup(group, states) {
         states[i].to,
         states[i].t
       );
-      if (states[i].from_green && states[i].to_green) {
+      if (states[i].from_b && states[i].to_b) {
         obj.material.color.setHSL(0.14, 1, 1);
-      } else if (states[i].to_green) {
+      } else if (states[i].to_b) {
         obj.material.color.setHSL(0.14, 1, 0.5 + 0.5 * states[i].t);
-      } else if (states[i].from_green) {
+      } else if (states[i].from_b) {
         obj.material.color.setHSL(0.14, 1, 1 - 0.5 * states[i].t);
       } else {
         obj.material.color.setHSL(0.14, 1, 0.5);
@@ -215,8 +180,6 @@ function updateParticlesInGroup(group, states) {
     }
   });
 }
-
-
 
 // --- Handle resize ---
 window.addEventListener('resize', () => {
@@ -239,28 +202,10 @@ controls.addEventListener('change', () => {
 });
 
 window.addEventListener('click', (event) => {
+  // ignore clicks on UI elements
   if (event.target.closest('.ui-element')) return;
-  // --- 1. Only react to clicks in the OVERVIEW (left half) ---
-  let mouseInMainViewport = event.clientX > viewportWidth;
-  if (settings.isPortrait) {
-    mouseInMainViewport = event.clientY > viewportHeight;
-  }
-  if (mouseInMainViewport || settings.collapseOverview) {
-    // convert mouse to NDC for right viewport
-    let rightOffset = viewportWidth + 2 * config.misc.gap;
-    let topOffset = 0;
-    if (settings.collapseOverview){
-      rightOffset = 2 * config.misc.gap;
-    }
-    if (settings.isPortrait) {
-      rightOffset = 0;
-      topOffset = viewportHeight + 2 * config.misc.gap;
-      if (settings.collapseOverview){
-        topOffset = 2 * config.misc.gap;
-      }
-    }
-    mouse.x = ((event.clientX - rightOffset) / viewportWidth) * 2 - 1;
-    mouse.y = (-(event.clientY - topOffset) / viewportHeight) * 2 + 1;
+  if (vp.contains(event, settings.main_viewport)) {
+    mouse = vp.toNDC(event, settings.main_viewport);
 
     // raycast against main scene using main camera
     raycaster.setFromCamera(mouse, cameras.main);
@@ -279,31 +224,23 @@ window.addEventListener('click', (event) => {
         return;
       }
     }
-    return;
   };
+  if (vp.contains(event, settings.overview_viewport)) {
+    // --- 2. Convert mouse position to NDC for LEFT viewport ---
+    mouse = vp.toNDC(event, settings.overview_viewport);
 
-  // --- 2. Convert mouse position to NDC for LEFT viewport ---
-  let overviewWidth = W / 2
-  let overviewHeight = H;
-  if (settings.isPortrait) {
-    overviewWidth = W;
-    overviewHeight = H / 2;
+    // --- 3. Raycast from overview camera ---
+    raycaster.setFromCamera(mouse, cameras.overview);
+
+    // --- 4. Intersect ray with the z=0 plane (region of the overview) ---
+    const planeZ0 = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+    const target = new THREE.Vector3();
+    const hit = raycaster.ray.intersectPlane(planeZ0, target);
+    if (!hit) return;
+
+    // --- 5. Move MAIN camera & controls to the clicked region (even if no object) ---
+    focusMainCamera(target);
   }
-  mouse.x = ((event.clientX / overviewWidth) * 2 - 1);
-  mouse.y = (-(event.clientY / overviewHeight) * 2 + 1);
-
-  // --- 3. Raycast from overview camera ---
-  raycaster.setFromCamera(mouse, cameras.overview);
-
-  // --- 4. Intersect ray with the z=0 plane (region of the overview) ---
-  const planeZ0 = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
-  const target = new THREE.Vector3();
-  const hit = raycaster.ray.intersectPlane(planeZ0, target);
-
-  if (!hit) return;
-
-  // --- 5. Move MAIN camera & controls to the clicked region (even if no object) ---
-  focusMainCamera(target);
 });
 
 function focusMainCamera(target) {
@@ -311,35 +248,6 @@ function focusMainCamera(target) {
   newCamPosition = target.clone().add(offset);
   newControlTarget = target;
   controls.update();
-}
-
-
-function createToggle(type = 'normal') {
-  let backgroundColor = type === 'b' ? 'rgba(200, 200, 200, 0.2)' : 'rgba(200, 200, 200, 0.9)';
-  let borderColor = type === 'b' ? 'rgba(200, 200, 200, 0.9)' : 'rgba(200, 200, 200, 0.2)';
-  const div = document.createElement('div');
-  div.className = 'line-toggle';
-  div.style.backgroundColor = backgroundColor;
-  div.style.outline = `6px solid ${borderColor}`;
-  div.style.outlineOffset = '3px';
-  attachToggleEvents(div);
-  return div;
-}
-
-function attachToggleEvents(el) {
-  el.addEventListener('pointerdown', (e) => {
-    e.stopPropagation();
-    controls.enabled = false;
-  });
-
-  el.addEventListener('pointerup', (e) => {
-    e.stopPropagation();
-    controls.enabled = true;
-  });
-
-  el.addEventListener('pointerleave', () => {
-    controls.enabled = true;
-  });
 }
 
 function show_new_network() {
@@ -354,10 +262,9 @@ function show_new_network() {
 function next_level() {
   fetch('http://127.0.0.1:8000/next_level', { method: 'POST' }).then(response => response.json()).then(data => {
     updateNetwork(settings, scenes, cameras, data, state, controls, { onToggle });
-    const solvedOverlay = document.getElementById("solvedOverlay");
-    if (solvedOverlay) {
-      solvedOverlay.remove();
-    }
+    const nextLevelBtn = document.getElementById("nextLevelBtn");
+    nextLevelBtn.disabled = false;
+    nextLevelBtn.textContent = "Next Level";
   });
 }
 
@@ -371,26 +278,23 @@ function next_level() {
 const collapseOverviewBtn = document.getElementById("collapseOverviewBtn");
 collapseOverviewBtn.addEventListener("click", () => {
   settings.collapseOverview = !settings.collapseOverview;
+  vp = getViewports(settings);
   const labelsOverviewDiv = document.getElementById('labelsOverview');
   const labelsMainDiv = document.getElementById('labelsMain');
+  labelsOverviewDiv.style.height = settings.overview_viewport.h + 'px';
+  labelsOverviewDiv.style.width = settings.overview_viewport.w + 'px';
+  labelsMainDiv.style.height = settings.main_viewport.h + 'px';
+  labelsMainDiv.style.width = settings.main_viewport.w + 'px';
+  labelsMainDiv.style.top = window.innerHeight - settings.main_viewport.h + 'px';
   if (settings.collapseOverview) {
     scenes.overview.remove(state.overviewNetwork);
     labelRendererOverview.domElement.style.display = 'none';
     if (settings.isPortrait) {
       collapseOverviewBtn.textContent = "⯆";
       collapseOverviewBtn.style.top = "10px";
-      viewportHeight = H - 2 * config.misc.gap;
-      viewportWidth = W;
-      labelsOverviewDiv.style.height = viewportHeight + 'px';
-      labelsMainDiv.style.height = viewportHeight + 'px';
-      labelsMainDiv.style.top = 2 * config.misc.gap + 'px';
     } else {
       collapseOverviewBtn.textContent = "⯈";
       collapseOverviewBtn.style.left = "10px";
-      viewportWidth = W - 2 * config.misc.gap;
-      viewportHeight = H;
-      labelsOverviewDiv.style.width = viewportWidth + 'px';
-      labelsMainDiv.style.width = viewportWidth + 'px';
     }
   } else {
     scenes.overview.add(state.overviewNetwork);
@@ -398,22 +302,12 @@ collapseOverviewBtn.addEventListener("click", () => {
     if (settings.isPortrait) {
       collapseOverviewBtn.textContent = "⯅";
       collapseOverviewBtn.style.top = "50%";
-      viewportWidth = W;
-      viewportHeight = 0.5 * H - config.misc.gap;
-      labelsOverviewDiv.style.height = viewportHeight + 'px';
-      labelsMainDiv.style.height = viewportHeight + 'px';
-      labelsMainDiv.style.top = (viewportHeight + 2 * config.misc.gap) + 'px';
     } else {
       collapseOverviewBtn.textContent = "⯇";
       collapseOverviewBtn.style.left = "50%";
-      viewportWidth = 0.5 * W - config.misc.gap;
-      viewportHeight = H;
-      labelsOverviewDiv.style.width = viewportWidth + 'px';
-      labelsMainDiv.style.width = viewportWidth + 'px';
     }
   }
-  labelRendererMain.setSize(viewportWidth, viewportHeight);
-  settings.aspect = viewportWidth / viewportHeight;
+  labelRendererMain.setSize(settings.main_viewport.w, settings.main_viewport.h);
   cameras.main.left = -d * settings.aspect * 0.3;
   cameras.main.right = d * settings.aspect * 0.3;
   cameras.main.top = d * 0.3;
@@ -441,3 +335,10 @@ function onToggle(switchID) {
       updateNetwork(settings, scenes, cameras, data, state, controls, { onToggle });
     });
 }
+
+document.getElementById('nextLevelBtn').addEventListener('click', () => {
+  const nextLevelBtn = document.getElementById('nextLevelBtn');
+  nextLevelBtn.disabled = true;
+  nextLevelBtn.textContent = 'Loading...';
+  next_level();
+});

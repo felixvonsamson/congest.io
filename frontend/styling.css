@@ -85,3 +85,35 @@ canvas {
     cursor: pointer;
     pointer-events: auto;
 }
+
+#solvedOverlay {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 2000;
+    padding: 24px 32px;
+    border-radius: 12px;
+    background: rgba(0, 0, 0, 0.8);
+    text-align: center;
+    font-family: Arial, sans-serif;
+    display: none;
+}
+
+#solvedMessage {
+    font-size: 48px;
+    font-weight: 700;
+    margin-bottom: 16px;
+    line-height: 1;
+    color: #fff;
+}
+
+#nextLevelBtn {
+    padding: 12px 24px;
+    font-size: 24px;
+    border: none;
+    border-radius: 8px;
+    background: #2196F3;
+    color: white;
+    cursor: pointer;
+}
