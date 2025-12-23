@@ -89,5 +89,6 @@
       "limit": 50.0
     }
   },
-  "cost": 0.0
+  "cost": 0.0,
+  "tutorial_info": "Try making a direct link between the largest producer (100) and the largest consumer (-110) by putting both horizontal lines on the second bus bar in the central node. Can you make sense of what is happening?"
 }

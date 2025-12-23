@@ -302,12 +302,13 @@ def calculate_power_flow(network):
         )
 
     # Calculate cost as the sum overloads
-    cost = sum(
+    network.cost = sum(
         max(0.0, abs(updated_lines[line.id].flow) - line.limit)
         for line in lines.values()
     )
+    network.lines = updated_lines
 
-    return NetworkState(nodes=nodes, lines=updated_lines, cost=cost, level=network.level)
+    return network
 
 
 def update_network(network, req: TopologyChangeRequest):
@@ -447,10 +448,15 @@ def solve_network(network):
     return best_state
 
 
-def load_level(level: int):
-    if level < 1 or level > 35:
-        raise ValueError("Level must be between 1 and 35")
-    file_path = f"levels/Level{level}.json"
+def load_level(level: int, tutorial: bool = False):
+    if tutorial:
+        if level < 1 or level > 2:
+            raise ValueError("Tutorial level must be between 1 and 2")
+        file_path = f"levels/tutorial{level}.json"
+    else:
+        if level < 1 or level > 35:
+            raise ValueError("Level must be between 1 and 35")
+        file_path = f"levels/Level{level}.json"
     network = update_network_from_file(file_path)
     network = reset_all_switches(network)
     network = calculate_power_flow(network)

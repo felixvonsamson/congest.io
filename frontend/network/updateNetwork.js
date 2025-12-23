@@ -46,7 +46,21 @@ export function updateNetwork(
   if (data.level === null) {
     levelIndicator.textContent = `Custom Network`;
   } else {
-    levelIndicator.textContent = `Level ${data.level}`;
+    if (data.tutorial) {
+        levelIndicator.textContent = `Tutorial ${data.level}`;
+    } else {
+        levelIndicator.textContent = `Level ${data.level}`;
+    }
+  }
+
+  // Update tutorial help
+  const tutorialHelp = document.getElementById("tutorialHelp");
+  if (data.tutorial && data.tutorial_info) {
+    tutorialHelp.style.display = "block";
+    tutorialHelp.textContent = data.tutorial_info;
+  } else {
+    tutorialHelp.style.display = "none";
+    tutorialHelp.textContent = "";
   }
 
   const solvedOverlay = document.getElementById("solvedOverlay");

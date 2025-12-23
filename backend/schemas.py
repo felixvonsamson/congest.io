@@ -23,7 +23,9 @@ class NetworkState(BaseModel):
     nodes: dict[str, Node]
     lines: dict[str, Line]
     cost: float = 10**6
+    tutorial: bool = False
     level: Optional[int] = None
+    tutorial_info: Optional[str] = None
 
     def __lt__(self, other):
         return self.cost < other.cost
@@ -48,4 +50,9 @@ def update_network_from_file(file_path: str) -> NetworkState:
         for line_id, line_data in data.get("lines", {}).items()
     }
     level = None if "Level" not in file_path else int(file_path.split("Level")[-1].split(".")[0])
-    return NetworkState(nodes=nodes, lines=lines, level=level)
+    if "tutorial" in file_path:
+        tutorial = True
+        level = int(file_path.split("tutorial")[-1].split(".")[0])
+    else:
+        tutorial = False
+    return NetworkState(nodes=nodes, lines=lines, level=level, tutorial=tutorial, tutorial_info=data.get("tutorial_info", None))

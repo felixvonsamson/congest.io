@@ -55,5 +55,6 @@
       "limit": 50.0
     }
   },
-  "cost": 0.0
+  "cost": 0.0,
+  "tutorial_info": "In this network you can see that the node in the south (49) is producing just under the maximal capacity of one line. Try to reroute the power that goes from the west node (31) to the south to avoid overloading the line."
 }

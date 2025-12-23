@@ -26,8 +26,9 @@ app.add_middleware(
 )
 
 # Global in-memory network (placeholder)
-level = 1
-network = load_level(level)
+tutorial = 1
+level = 0
+network = load_level(tutorial, tutorial=True)
 
 
 @app.get("/network_state")
@@ -125,7 +126,13 @@ def load_network(file_path: str):
 
 @app.post("/next_level")
 def next_level():
-    global level, network
-    level += 1
-    network = load_level(level)
+    global level, tutorial, network
+    print(f"Current level: {level}, tutorial: {tutorial}")
+    print(tutorial >= 2)
+    if tutorial < 2:
+        tutorial += 1
+        network = load_level(tutorial, tutorial=True)
+    else:
+        level += 1
+        network = load_level(level)
     return network
