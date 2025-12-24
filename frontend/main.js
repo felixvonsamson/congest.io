@@ -3,8 +3,9 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 
 import { config } from "./config.js";
-import { updateNetwork } from './network/updateNetwork.js';
+import { updateNetwork, toggleSwitch } from './network/updateNetwork.js';
 import { getViewports } from './ui/viewport_calculations.js';
+import { calculatePowerFlow } from './network/powerFlow.js';
 
 // --- Managing sessions storage ---
 if (!sessionStorage.getItem('level')) {
@@ -131,15 +132,8 @@ async function fetchNetworkPowerflow() {
     networkData = data;
     sessionStorage.setItem('network', JSON.stringify(networkData));
   }
-  const response = await fetch('/api/network_state', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ network_data: networkData })
-  });
-  const data = await response.json();
-  return data;
+  networkData = calculatePowerFlow(networkData);
+  return networkData;
 }
 
 // --- Main ---
@@ -262,18 +256,17 @@ window.addEventListener('click', (event) => {
       if (inter.object.userData && inter.object.userData.id) {
         // call reset endpoint for that node
         let network = JSON.parse(sessionStorage.getItem('network'));
-        fetch("/api/reset_switches", {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ network_data: network, node_id: inter.object.userData.id })
-        })
-          .then(res => res.json())
-          .then(data => {
-            updateNetwork(settings, scenes, cameras, data, state, controls, { onToggle });
-          })
-          .catch(err => console.error('reset_switches failed', err));
+        // for all lines in the network, check if the from_node or to_node is inter.object.userData.id + "b" and if it is the case switch the switch back on the main node
+        for (const line of Object.values(network.lines)) {
+          if (line.from_node === inter.object.userData.id + "b") {
+            network = toggleSwitch(network, line.id + "_from");
+          }
+          if (line.to_node === inter.object.userData.id + "b") {
+            network = toggleSwitch(network, line.id + "_to");
+          }
+        }
+        network = calculatePowerFlow(network);
+        updateNetwork(settings, scenes, cameras, network, state, controls, { onToggle });
         return;
       }
     }
@@ -418,21 +411,15 @@ window.addEventListener('keydown', (event) => {
 
 function onToggle(switchID) {
   let network = JSON.parse(sessionStorage.getItem('network'));
-  fetch("/api/switch_node", {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ network_data: network, switch_id: switchID })
-  })
-    .then(res => res.json())
-    .then(data => {
-      if (data.error) {
-        showErrorToast(data.error);
-        return;
-      }
-      updateNetwork(settings, scenes, cameras, data, state, controls, { onToggle });
-    });
+  network = toggleSwitch(network, switchID);
+  network = calculatePowerFlow(network);
+  if (network.cost === Infinity) {
+    showErrorToast("This switch would cut off part of the grid.");
+    // Revert the switch toggle
+    network = toggleSwitch(network, switchID);
+    network = calculatePowerFlow(network);
+  }
+  updateNetwork(settings, scenes, cameras, network, state, controls, { onToggle });
 }
 
 function showErrorToast(message) {

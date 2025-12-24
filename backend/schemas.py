@@ -16,7 +16,7 @@ class Line(BaseModel):
     from_node: str
     to_node: str
     flow: float = 0.0
-    limit: float = 100.0
+    limit: float = 50.0
 
 
 class NetworkState(BaseModel):
