@@ -6,6 +6,14 @@ import { config } from "./config.js";
 import { updateNetwork } from './network/updateNetwork.js';
 import { getViewports } from './ui/viewport_calculations.js';
 
+// --- Managing sessions storage ---
+if (!sessionStorage.getItem('level')) {
+  sessionStorage.setItem('level', '0');
+  sessionStorage.setItem('max_level', '0');
+  sessionStorage.setItem('tutorial', '1');
+  sessionStorage.setItem('isTutorial', 'true');
+}
+
 // --- Settings ---
 const settings = {
   collapseOverview: false,
@@ -96,14 +104,45 @@ if (settings.isPortrait) {
 }
 
 // --- Fetch network data ---
-async function fetchNetwork() {
-  const response = await fetch('/api/network_state');
+async function fetchNetworkPowerflow() {
+  let networkData = JSON.parse(sessionStorage.getItem('network'));
+  if (!networkData) {
+    let isTutorial = sessionStorage.getItem('isTutorial') === 'true';
+    let levelNum = parseInt(sessionStorage.getItem('level'));
+    if (isTutorial) {
+      levelNum = parseInt(sessionStorage.getItem('tutorial'));
+    }
+    const response = await fetch('/api/load_level', {
+      method: 'POST',
+      headers: {
+      'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ 
+        level_num: levelNum, 
+        is_tutorial: isTutorial
+      })
+    });
+    const data = await response.json();
+    if (data.error) {
+      console.error('Error loading level:', data.error);
+      return;
+    }
+    networkData = data;
+    sessionStorage.setItem('network', JSON.stringify(networkData));
+  }
+  const response = await fetch('/api/network_state', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ network_data: networkData })
+  });
   const data = await response.json();
   return data;
 }
 
 // --- Main ---
-fetchNetwork().then(data => {
+fetchNetworkPowerflow().then(data => {
   updateNetwork(settings, scenes, cameras, data, state, controls, { onToggle });
   // Show help screen on first tutorial level
   const helpPanel = document.getElementById("helpPanel");
@@ -221,7 +260,14 @@ window.addEventListener('click', (event) => {
     for (const inter of intersects) {
       if (inter.object.userData && inter.object.userData.id) {
         // call reset endpoint for that node
-        fetch(`/api/reset_switches?node_id=${inter.object.userData.id}`, { method: 'POST' })
+        let network = JSON.parse(sessionStorage.getItem('network'));
+        fetch("/api/reset_switches", {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ network_data: network, node_id: inter.object.userData.id })
+        })
           .then(res => res.json())
           .then(data => {
             updateNetwork(settings, scenes, cameras, data, state, controls, { onToggle });
@@ -266,7 +312,32 @@ function show_new_network() {
 }
 
 function next_level() {
-  fetch('/api/next_level', { method: 'POST' }).then(response => response.json()).then(data => {
+  let level = parseInt(sessionStorage.getItem('level'));
+  let tutorial = parseInt(sessionStorage.getItem('tutorial'));
+  let is_tutorial = sessionStorage.getItem('isTutorial') === 'true';
+  let levelNum = 1;
+  if (is_tutorial && tutorial < 2) {
+    tutorial += 1;
+    levelNum = tutorial;
+    sessionStorage.setItem('tutorial', tutorial.toString());
+    is_tutorial = true;
+  } else {
+    is_tutorial = false;
+    sessionStorage.setItem('isTutorial', 'false');
+    level += 1;
+    levelNum = level;
+    sessionStorage.setItem('level', level.toString());
+    if (level > parseInt(sessionStorage.getItem('max_level'))) {
+      sessionStorage.setItem('max_level', level.toString());
+    }
+  }
+  fetch('/api/load_level', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ level_num: levelNum, is_tutorial: is_tutorial })
+  }).then(response => response.json()).then(data => {
     updateNetwork(settings, scenes, cameras, data, state, controls, { onToggle });
     const nextLevelBtn = document.getElementById("nextLevelBtn");
     nextLevelBtn.disabled = false;
@@ -323,18 +394,35 @@ collapseOverviewBtn.addEventListener("click", () => {
 
 window.addEventListener('keydown', (event) => {
   if (event.key === 's' || event.key === 'S') {
-    fetch('/api/solve', { method: 'POST' })
+    let network = JSON.parse(sessionStorage.getItem('network'));
+    fetch('/api/solve', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ network_data: network })
+    })
       .then(response => response.json())
       .then(data => {
         updateNetwork(settings, scenes, cameras, data, state, controls, { onToggle });
       })
       .catch(err => console.error('solve failed', err));
   }
+  if (event.key =='c') {
+    //clear session storage and reload page
+    sessionStorage.clear();
+    location.reload();
+  }
 });
 
 function onToggle(switchID) {
-  fetch(`/api/switch_node?switch_id=${switchID}`, {
-    method: 'POST'
+  let network = JSON.parse(sessionStorage.getItem('network'));
+  fetch("/api/switch_node", {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ network_data: network, switch_id: switchID })
   })
     .then(res => res.json())
     .then(data => {

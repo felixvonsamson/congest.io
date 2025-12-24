@@ -10,6 +10,7 @@ export function updateNetwork(
     controls,
     callbacks,
 ) {
+    sessionStorage.setItem('network', JSON.stringify(data));
     if (state.mainNetwork) scenes.main.remove(state.mainNetwork);
     if (state.overviewNetwork) scenes.overview.remove(state.overviewNetwork);
 

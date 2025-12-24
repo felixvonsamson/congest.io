@@ -10,7 +10,15 @@ from .network import (
     solve_network,
     load_level,
 )
-from .schemas import TopologyChangeRequest, update_network_from_file
+from .schemas import (
+    TopologyChangeRequest, 
+    LoadLevelRequest, 
+    NetworkStateRequest,
+    SwitchNodeRequest,
+    ResetSwitchesRequest,
+    update_network_from_file, 
+    dict_to_network_state
+)
 from fastapi.middleware.cors import CORSMiddleware
 import os
 from datetime import datetime
@@ -26,39 +34,27 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Global in-memory network (placeholder)
-tutorial = 1
-level = 0
-network = load_level(tutorial, tutorial=True)
 
-
-@router.get("/network_state")
-def get_network_state():
-    global network
+@router.post("/network_state")
+def get_network_state(data: NetworkStateRequest):
+    network = dict_to_network_state(data.network_data)
+    if not network.lines or not network.nodes:
+        return {"error": "Empty network data"}
     network = calculate_power_flow(network)
     return network
 
 
 @router.post("/reset_network")
 def reset_network():
-    global network
     network = generate_network()
     return network
 
 
-@router.post("/new_layout")
-def get_new_layout():
-    global network
-    network = force_directed_layout(network, k=150.0)
-    network = calculate_power_flow(network)
-    return network
-
-
 @router.post("/switch_node")
-def switch_node(switch_id: str):
-    global network
+def switch_node(data: SwitchNodeRequest):
+    network = dict_to_network_state(data.network_data)
     # switch_id has the format "L[from_id]-[to_id]_[from/to]"
-    line_id, direction = (switch_id.split("_")[0], switch_id.split("_")[1])
+    line_id, direction = (data.switch_id.split("_")[0], data.switch_id.split("_")[1])
     if line_id not in network.lines:
         return {"error": "Invalid switch ID"}
     new_state = update_network(
@@ -76,10 +72,10 @@ def switch_node(switch_id: str):
 
 
 @router.post("/reset_switches")
-def reset_switches(node_id: str):
-    global network
+def reset_switches(data: ResetSwitchesRequest):
+    network = dict_to_network_state(data.network_data)
     for line in list(network.lines.values()):
-        if line.from_node == node_id + "b":
+        if line.from_node == data.node_id + "b":
             network = update_network(
                 network,
                 TopologyChangeRequest(
@@ -87,7 +83,7 @@ def reset_switches(node_id: str):
                     direction="from",
                 ),
             )
-        if line.to_node == node_id + "b":
+        if line.to_node == data.node_id + "b":
             network = update_network(
                 network,
                 TopologyChangeRequest(
@@ -100,42 +96,32 @@ def reset_switches(node_id: str):
 
 
 @router.post("/solve")
-def solve_net():
-    global network
+def solve_net(data: NetworkStateRequest):
+    network = dict_to_network_state(data.network_data)
     network = solve_network(network)
     return network
 
 
-@router.get("/save_network")
-def save_network():
-    global network
-    os.makedirs("saves", exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filepath = f"saves/network_{timestamp}.json"
-    with open(filepath, "w") as f:
-        json.dump(network.dict(), f)
-    return {"status": "Network saved", "file": filepath}
+# @router.post("/save_network")
+# def save_network(network: dict):
+#     os.makedirs("saves", exist_ok=True)
+#     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+#     filepath = f"saves/network_{timestamp}.json"
+#     with open(filepath, "w") as f:
+#         json.dump(network, f)
+#     return {"status": "Network saved", "file": filepath}
 
 
-@router.get("/load_network")
+@router.post("/load_network")
 def load_network(file_path: str):
-    global network
     network = update_network_from_file(file_path)
     network = calculate_power_flow(network)
     return network
 
 
-@router.post("/next_level")
-def next_level():
-    global level, tutorial, network
-    print(f"Current level: {level}, tutorial: {tutorial}")
-    print(tutorial >= 2)
-    if tutorial < 2:
-        tutorial += 1
-        network = load_level(tutorial, tutorial=True)
-    else:
-        level += 1
-        network = load_level(level)
+@router.post("/load_level")
+def load_level_endpoint(data: LoadLevelRequest):
+    network = load_level(data.level_num, tutorial=data.is_tutorial)
     return network
 
 

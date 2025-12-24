@@ -35,6 +35,21 @@ class TopologyChangeRequest(BaseModel):
     line_id: str
     direction: str  # "to" or "from"
 
+class LoadLevelRequest(BaseModel):
+    level_num: int
+    is_tutorial: bool = False
+
+class NetworkStateRequest(BaseModel):
+    network_data: dict
+
+class SwitchNodeRequest(BaseModel):
+    network_data: dict
+    switch_id: str
+
+class ResetSwitchesRequest(BaseModel):
+    network_data: dict
+    node_id: str
+
 
 def update_network_from_file(file_path: str) -> NetworkState:
     if not os.path.exists(file_path):
@@ -56,3 +71,14 @@ def update_network_from_file(file_path: str) -> NetworkState:
     else:
         tutorial = False
     return NetworkState(nodes=nodes, lines=lines, level=level, tutorial=tutorial, tutorial_info=data.get("tutorial_info", None))
+
+def dict_to_network_state(data: dict) -> NetworkState:
+    nodes = {
+        node_id: Node(**node_data)
+        for node_id, node_data in data.get("nodes", {}).items()
+    }
+    lines = {
+        line_id: Line(**line_data)
+        for line_id, line_data in data.get("lines", {}).items()
+    }
+    return NetworkState(nodes=nodes, lines=lines, cost=data.get("cost", 10**6), tutorial=data.get("tutorial", False), level=data.get("level", None), tutorial_info=data.get("tutorial_info", None))
