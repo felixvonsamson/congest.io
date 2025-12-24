@@ -76,6 +76,7 @@ document.getElementById('labelsMain').appendChild(labelRendererMain.domElement);
 // --- Controls ---
 const inputEl = document.getElementById('labelsMain');
 const controls = new OrbitControls(cameras.main, inputEl);
+controls.touches.ONE = THREE.TOUCH.PAN;
 controls.enableRotate = false;  // no rotation
 controls.target.set(250, 250, 0);
 controls.update();
