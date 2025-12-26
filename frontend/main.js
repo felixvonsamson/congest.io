@@ -17,7 +17,6 @@ if (!sessionStorage.getItem('level')) {
 
 // --- Settings ---
 const settings = {
-  collapseOverview: false,
   overview_viewport: null,
   main_viewport: null,
   aspect: null,

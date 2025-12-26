@@ -32,9 +32,6 @@ export function getViewports(settings) {
 
     /** Check if mouse is inside a viewport */
     contains(event, vp) {
-        if (vp == settings.overview_viewport && settings.collapseOverview) {
-            return false;
-        }
         const clientY = window.innerHeight - event.clientY; // invert Y for checking
         return (
             event.clientX >= vp.x &&

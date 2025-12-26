@@ -29,20 +29,6 @@ canvas {
     color: #333;
 }
 
-#collapseOverviewBtn {
-    position: fixed;
-    left: 50%;
-    top: 50%;
-    z-index: 1000;
-    padding: 8px 10px;
-    border-radius: 50%;
-    background: #fff;
-    border: none;
-    cursor: pointer;
-    font-weight: 600;
-    transform: translate(-50%, -50%);
-}
-
 #labelsOverview {
     position: absolute;
     top: 0;
