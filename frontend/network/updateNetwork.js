@@ -14,8 +14,12 @@ export function updateNetwork(
     if (state.mainNetwork) scenes.main.remove(state.mainNetwork);
     if (state.overviewNetwork) scenes.overview.remove(state.overviewNetwork);
 
+    state.particles = [];
+    state.particleMeshes = [];
+    state.labelsMain.clear();
+    state.labelsOverview.clear();
     state.mainNetwork = createNetwork(network, state, controls, callbacks);
-    state.overviewNetwork = state.mainNetwork.clone();
+    state.overviewNetwork = createNetwork(network, state, controls, callbacks, true);
 
     scenes.main.add(state.mainNetwork);
     scenes.overview.add(state.overviewNetwork);
@@ -29,11 +33,6 @@ export function updateNetwork(
     const center_y = (max_y + min_y) / 2;
     let size_x = (max_x - min_x) * 1.2;
     let size_y = (max_y - min_y) * 1.2;
-    if (size_x > size_y * settings.aspect) {
-        size_y = size_x / settings.aspect;
-    } else {
-        size_x = size_y * settings.aspect;
-    }
     cameras.overview.left = -size_x / 2;
     cameras.overview.right = size_x / 2;
     cameras.overview.top = size_y / 2;

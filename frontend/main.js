@@ -18,7 +18,6 @@ if (!sessionStorage.getItem('level')) {
 // --- Settings ---
 const settings = {
   collapseOverview: false,
-  isPortrait: null,
   overview_viewport: null,
   main_viewport: null,
   aspect: null,
@@ -100,11 +99,6 @@ cameraRect.position.copy(controls.target);
 cameraRect.renderOrder = 10;  // render on top
 scenes.overview.add(cameraRect);
 
-// --- Update collapse button symbol ---
-if (settings.isPortrait) {
-  document.getElementById('collapseOverviewBtn').textContent = "⯅";
-}
-
 // --- Fetch network data ---
 async function fetchNetworkPowerflow() {
   let networkData = JSON.parse(sessionStorage.getItem('network'));
@@ -173,25 +167,21 @@ function animate() {
   }
 
   updateParticlesInGroup(state.mainNetwork, state.particles);
-  updateParticlesInGroup(state.overviewNetwork, state.particles);
 
-  if (!settings.collapseOverview) {
-      // --- Render overview ---
-      renderer.setViewport(settings.overview_viewport.x, settings.overview_viewport.y, settings.overview_viewport.w, settings.overview_viewport.h);
-      renderer.setScissor(settings.overview_viewport.x, settings.overview_viewport.y, settings.overview_viewport.w, settings.overview_viewport.h);
-      renderer.setScissorTest(true);
-      renderer.render(scenes.overview, cameras.overview);
-  }
   // --- Render interactive camera ---
   renderer.setViewport(settings.main_viewport.x, settings.main_viewport.y, settings.main_viewport.w, settings.main_viewport.h);
   renderer.setScissor(settings.main_viewport.x, settings.main_viewport.y, settings.main_viewport.w, settings.main_viewport.h);
   renderer.setScissorTest(true);
   renderer.render(scenes.main, cameras.main);
   
+  // --- Render overview ---
+    renderer.setViewport(settings.overview_viewport.x, settings.overview_viewport.y, settings.overview_viewport.w, settings.overview_viewport.h);
+    renderer.setScissor(settings.overview_viewport.x, settings.overview_viewport.y, settings.overview_viewport.w, settings.overview_viewport.h);
+    renderer.setScissorTest(true);
+    renderer.render(scenes.overview, cameras.overview);
+
   // --- Render MAIN labels into right half ---
-  if (!settings.collapseOverview) {
-    labelRendererOverview.render(state.labelsOverview, cameras.overview);
-  }
+  labelRendererOverview.render(state.labelsOverview, cameras.overview);
   labelRendererMain.render(state.labelsMain, cameras.main);
 }
 animate();
@@ -223,9 +213,8 @@ function updateParticlesInGroup(group, states) {
 
 // --- Handle resize ---
 window.addEventListener('resize', () => {
-  settings.isPortrait = window.innerHeight > window.innerWidth;
   for (const cam of [cameras.main, cameras.overview]) {
-    settings.aspect = 0.5 * window.innerWidth / window.innerHeight;
+    settings.aspect = window.innerWidth / window.innerHeight;
     cam.left = -d * settings.aspect;
     cam.right = d * settings.aspect;
     cam.top = d;
@@ -244,6 +233,24 @@ controls.addEventListener('change', () => {
 window.addEventListener('click', (event) => {
   // ignore clicks on UI elements
   if (event.target.closest('.ui-element')) return;
+  if (vp.contains(event, settings.overview_viewport)) {
+    // --- 2. Convert mouse position to NDC for LEFT viewport ---
+    mouse = vp.toNDC(event, settings.overview_viewport);
+
+    // --- 3. Raycast from overview camera ---
+    raycaster.setFromCamera(mouse, cameras.overview);
+
+    // --- 4. Intersect ray with the z=0 plane (region of the overview) ---
+    const planeZ0 = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+    const target = new THREE.Vector3();
+    const hit = raycaster.ray.intersectPlane(planeZ0, target);
+    if (!hit) return;
+
+    console.log("Clicked overview at ", target);
+    // --- 5. Move MAIN camera & controls to the clicked region (even if no object) ---
+    focusMainCamera(target);
+    return;
+  }
   if (vp.contains(event, settings.main_viewport)) {
     mouse = vp.toNDC(event, settings.main_viewport);
 
@@ -271,22 +278,6 @@ window.addEventListener('click', (event) => {
       }
     }
   };
-  if (vp.contains(event, settings.overview_viewport)) {
-    // --- 2. Convert mouse position to NDC for LEFT viewport ---
-    mouse = vp.toNDC(event, settings.overview_viewport);
-
-    // --- 3. Raycast from overview camera ---
-    raycaster.setFromCamera(mouse, cameras.overview);
-
-    // --- 4. Intersect ray with the z=0 plane (region of the overview) ---
-    const planeZ0 = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
-    const target = new THREE.Vector3();
-    const hit = raycaster.ray.intersectPlane(planeZ0, target);
-    if (!hit) return;
-
-    // --- 5. Move MAIN camera & controls to the clicked region (even if no object) ---
-    focusMainCamera(target);
-  }
 });
 
 function focusMainCamera(target) {
@@ -345,46 +336,6 @@ function next_level() {
 //   newNetworkBtn.textContent = "Loading...";
 //   show_new_network();
 // });
-
-const collapseOverviewBtn = document.getElementById("collapseOverviewBtn");
-collapseOverviewBtn.addEventListener("click", () => {
-  settings.collapseOverview = !settings.collapseOverview;
-  vp = getViewports(settings);
-  const labelsOverviewDiv = document.getElementById('labelsOverview');
-  const labelsMainDiv = document.getElementById('labelsMain');
-  labelsOverviewDiv.style.height = settings.overview_viewport.h + 'px';
-  labelsOverviewDiv.style.width = settings.overview_viewport.w + 'px';
-  labelsMainDiv.style.height = settings.main_viewport.h + 'px';
-  labelsMainDiv.style.width = settings.main_viewport.w + 'px';
-  labelsMainDiv.style.top = window.innerHeight - settings.main_viewport.h + 'px';
-  if (settings.collapseOverview) {
-    scenes.overview.remove(state.overviewNetwork);
-    labelRendererOverview.domElement.style.display = 'none';
-    if (settings.isPortrait) {
-      collapseOverviewBtn.textContent = "⯆";
-      collapseOverviewBtn.style.top = "10px";
-    } else {
-      collapseOverviewBtn.textContent = "⯈";
-      collapseOverviewBtn.style.left = "10px";
-    }
-  } else {
-    scenes.overview.add(state.overviewNetwork);
-    labelRendererOverview.domElement.style.display = 'block';
-    if (settings.isPortrait) {
-      collapseOverviewBtn.textContent = "⯅";
-      collapseOverviewBtn.style.top = "50%";
-    } else {
-      collapseOverviewBtn.textContent = "⯇";
-      collapseOverviewBtn.style.left = "50%";
-    }
-  }
-  labelRendererMain.setSize(settings.main_viewport.w, settings.main_viewport.h);
-  cameras.main.left = -d * settings.aspect * 0.3;
-  cameras.main.right = d * settings.aspect * 0.3;
-  cameras.main.top = d * 0.3;
-  cameras.main.bottom = -d * 0.3;
-  cameras.main.updateProjectionMatrix();
-});
 
 window.addEventListener('keydown', (event) => {
   if (event.key === 's' || event.key === 'S') {

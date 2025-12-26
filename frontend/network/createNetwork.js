@@ -3,12 +3,7 @@ import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import { config } from '../config.js';
 import { createToggle } from '../ui/toggles.js';
 
-export function createNetwork(data, state, controls, callbacks) {
-
-  state.particles = [];
-  state.particleMeshes = [];
-  state.labelsMain.clear();
-  state.labelsOverview.clear();
+export function createNetwork(data, state, controls, callbacks, overview = false) {
 
   const group = new THREE.Group();
 
@@ -30,7 +25,8 @@ export function createNetwork(data, state, controls, callbacks) {
     const lineLength = fromVector.distanceTo(toVector);
     const center = new THREE.Vector3().addVectors(fromVector, toVector).multiplyScalar(0.5);
     const angle = Math.atan2(direction.y, direction.x);
-    const geometry = new THREE.PlaneGeometry(lineLength, config.sizes.lineWidth);
+    const lineWidth = overview ? config.sizes.lineWidth*3 : config.sizes.lineWidth;
+    const geometry = new THREE.PlaneGeometry(lineLength, lineWidth);
     const material = new THREE.LineBasicMaterial({
       color: Math.abs(line.flow) > line.limit
         ? config.colors.lineOverload
@@ -42,49 +38,51 @@ export function createNetwork(data, state, controls, callbacks) {
     lineRect.renderOrder = config.render_order.lines;
     group.add(lineRect);
 
-    // Moving particle along the line
-    let length = fromVector.distanceTo(toVector);
-    const n = Math.max(1, Math.floor(length / 10));
+    if (!overview) {
+      // Moving particle along the line
+      let length = fromVector.distanceTo(toVector);
+      const n = Math.max(1, Math.floor(length / 10));
 
-    for (let i = 0; i < n; i++) {
-        const mesh = createParticle(from, to, fromVector, toVector, line.flow / length * 2, i / n);
-        mesh.renderOrder = config.render_order.particles;
-        group.add(mesh);
-        state.particleMeshes.push(mesh);
-        state.particles.push(mesh.userData.state);
-    }
-
-    // Flow magnitude label using CSS2DObject
-    const div = document.createElement('div');
-    div.className = 'label';
-    div.textContent = Math.abs(line.flow).toFixed(0);
-    div.style.color = 'yellow';
-    const label = new CSS2DObject(div);
-    label.position.set((from.x + to.x) / 2, (from.y + to.y) / 2, 0);
-    state.labelsMain.add(label);
-    state.labelsOverview.add(label.clone());
-
-    for (let end of ["from", "to"]) {
-      let type = "normal"
-      if (end === "from" && from.id.includes('b') || end === "to" && to.id.includes('b')) {
-        type = "b"
+      for (let i = 0; i < n; i++) {
+          const mesh = createParticle(from, to, fromVector, toVector, line.flow / length * 2, i / n);
+          mesh.renderOrder = config.render_order.particles;
+          group.add(mesh);
+          state.particleMeshes.push(mesh);
+          state.particles.push(mesh.userData.state);
       }
-      const toggleDiv = createToggle(type = type, controls);
-      toggleDiv.addEventListener('click', (event) => {
-        callbacks.onToggle(line.id+"_"+end);
-      });
-      const toggle = new CSS2DObject(toggleDiv);
-      const v_from = new THREE.Vector3(from.x, from.y, 0);
-      const v_to = new THREE.Vector3(to.x, to.y, 0);
-      const v_dir = new THREE.Vector3().subVectors(v_to, v_from).normalize();
-      let v_pos;
-      if (end === "from") {
-        v_pos = v_from.clone().add(v_dir.clone().multiplyScalar(15));
-      } else {
-        v_pos = v_to.clone().add(v_dir.clone().multiplyScalar(-15));
+
+      // Flow magnitude label using CSS2DObject
+      const div = document.createElement('div');
+      div.className = 'label';
+      div.textContent = Math.abs(line.flow).toFixed(0);
+      div.style.color = 'yellow';
+      const label = new CSS2DObject(div);
+      label.position.set((from.x + to.x) / 2, (from.y + to.y) / 2, 0);
+      state.labelsMain.add(label);
+      state.labelsOverview.add(label.clone());
+
+      for (let end of ["from", "to"]) {
+        let type = "normal"
+        if (end === "from" && from.id.includes('b') || end === "to" && to.id.includes('b')) {
+          type = "b"
+        }
+        const toggleDiv = createToggle(type = type, controls);
+        toggleDiv.addEventListener('click', (event) => {
+          callbacks.onToggle(line.id+"_"+end);
+        });
+        const toggle = new CSS2DObject(toggleDiv);
+        const v_from = new THREE.Vector3(from.x, from.y, 0);
+        const v_to = new THREE.Vector3(to.x, to.y, 0);
+        const v_dir = new THREE.Vector3().subVectors(v_to, v_from).normalize();
+        let v_pos;
+        if (end === "from") {
+          v_pos = v_from.clone().add(v_dir.clone().multiplyScalar(15));
+        } else {
+          v_pos = v_to.clone().add(v_dir.clone().multiplyScalar(-15));
+        }
+        toggle.position.set(v_pos.x, v_pos.y, 0);
+        state.labelsMain.add(toggle);
       }
-      toggle.position.set(v_pos.x, v_pos.y, 0);
-      state.labelsMain.add(toggle);
     }
   });
 
@@ -92,6 +90,9 @@ export function createNetwork(data, state, controls, callbacks) {
   Object.entries(data.nodes).forEach(([id, node]) => {
     if (id.includes('b')) {
       const nodeMesh = new THREE.Mesh(bNodeGeometry, bNodeMaterial);
+      if (overview) {
+        nodeMesh.scale.set(1.5, 1.5, 1);
+      }
       nodeMesh.position.set(node.x, node.y, 0);
       nodeMesh.renderOrder = config.render_order.bNodes;
       group.add(nodeMesh);
@@ -101,24 +102,24 @@ export function createNetwork(data, state, controls, callbacks) {
         var material = nodeConsMaterial;
       }
       const nodeMesh = new THREE.Mesh(nodeGeometry, material);
+      if (overview) {
+        nodeMesh.scale.set(1.5, 1.5, 1);
+      }
       nodeMesh.position.set(node.x, node.y, 0);
       nodeMesh.userData = { id: node.id };
       nodeMesh.renderOrder = config.render_order.nodes;
       group.add(nodeMesh);
 
-      // Node injection label using CSS2DObject
-      const divMain = document.createElement('div');
-      divMain.className = 'label';
-      divMain.textContent = node.injection.toFixed(0);
-      divMain.style.color = 'white';
-      const label = new CSS2DObject(divMain);
-      label.position.set(node.x, node.y, 0);
-      state.labelsMain.add(label);
-
-      const divOverview = divMain.cloneNode(true);
-      const labelOverview = new CSS2DObject(divOverview);
-      labelOverview.position.set(node.x, node.y, 0);
-      state.labelsOverview.add(labelOverview);
+      if (!overview) {
+        // Node injection label using CSS2DObject
+        const divMain = document.createElement('div');
+        divMain.className = 'label';
+        divMain.textContent = node.injection.toFixed(0);
+        divMain.style.color = 'white';
+        const label = new CSS2DObject(divMain);
+        label.position.set(node.x, node.y, 0);
+        state.labelsMain.add(label);
+      }
     }
   });
   return group;
