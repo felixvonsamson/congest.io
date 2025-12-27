@@ -25,7 +25,7 @@ export function createNetwork(data, state, controls, callbacks, overview = false
     const lineLength = fromVector.distanceTo(toVector);
     const center = new THREE.Vector3().addVectors(fromVector, toVector).multiplyScalar(0.5);
     const angle = Math.atan2(direction.y, direction.x);
-    const lineWidth = overview ? config.sizes.lineWidth*3 : config.sizes.lineWidth;
+    const lineWidth = overview ? config.sizes.lineWidth*5 : config.sizes.lineWidth;
     const geometry = new THREE.PlaneGeometry(lineLength, lineWidth);
     const material = new THREE.LineBasicMaterial({
       color: Math.abs(line.flow) > line.limit
@@ -37,6 +37,25 @@ export function createNetwork(data, state, controls, callbacks, overview = false
     lineRect.rotation.z = angle;
     lineRect.renderOrder = config.render_order.lines;
     group.add(lineRect);
+
+    // Flow magnitude label using CSS2DObject
+    const div = document.createElement('div');
+    div.className = overview ? 'label-small' : 'label';
+    if (Math.abs(line.flow) >= 49.5 && Math.abs(line.flow) <= 50.5) {
+      div.textContent = Math.abs(line.flow).toFixed(1);
+    } else if (Math.abs(line.flow) >= 49.95 && Math.abs(line.flow) <= 50.05) {
+      div.textContent = Math.abs(line.flow).toFixed(2);
+    } else {
+      div.textContent = Math.abs(line.flow).toFixed(0);
+    }
+    div.style.color = 'yellow';
+    const label = new CSS2DObject(div);
+    label.position.set((from.x + to.x) / 2, (from.y + to.y) / 2, 0);
+    if (overview) {
+      state.labelsOverview.add(label);
+    } else {
+      state.labelsMain.add(label);
+    }
 
     if (!overview) {
       // Moving particle along the line
@@ -50,16 +69,6 @@ export function createNetwork(data, state, controls, callbacks, overview = false
           state.particleMeshes.push(mesh);
           state.particles.push(mesh.userData.state);
       }
-
-      // Flow magnitude label using CSS2DObject
-      const div = document.createElement('div');
-      div.className = 'label';
-      div.textContent = Math.abs(line.flow).toFixed(0);
-      div.style.color = 'yellow';
-      const label = new CSS2DObject(div);
-      label.position.set((from.x + to.x) / 2, (from.y + to.y) / 2, 0);
-      state.labelsMain.add(label);
-      state.labelsOverview.add(label.clone());
 
       for (let end of ["from", "to"]) {
         let type = "normal"

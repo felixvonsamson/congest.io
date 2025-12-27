@@ -5,7 +5,7 @@ export function getViewports(settings) {
   const H = window.innerHeight;
   const gap = config.misc.gap;
 
-  const overviewSize = Math.min(0.4 * W, 450);
+  const overviewSize = Math.min(0.4 * W, 350);
   settings.overview_viewport = {
     x: 0,
     y: H-overviewSize,
