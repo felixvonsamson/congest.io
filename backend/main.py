@@ -1,98 +1,142 @@
 from copy import deepcopy
 import math
-from fastapi import FastAPI
-import json
+from fastapi import FastAPI, Depends, HTTPException
+from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy.orm import Session
 from .network import (
     generate_network,
     calculate_power_flow,
     update_network,
-    force_directed_layout,
     solve_network,
     load_level,
 )
 from .schemas import (
+    ProgressUpdateRequest,
     TopologyChangeRequest, 
     LoadLevelRequest, 
     NetworkStateRequest,
     SwitchNodeRequest,
     ResetSwitchesRequest,
-    update_network_from_file, 
-    dict_to_network_state
+    dict_to_network_state,
+    RegisterRequest,
+    LoginRequest,
+    PlayerResponse,
 )
 from fastapi.middleware.cors import CORSMiddleware
-import os
-from datetime import datetime
 from fastapi import APIRouter
+
+from .database import Base, engine, SessionLocal
+from .models import Player
+from .auth import (
+    hash_password,
+    verify_password,
+)
+from .jwt_utils import (
+    create_access_token,
+    decode_access_token,
+)
+
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 router = APIRouter(prefix="/api")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # or ["http://localhost:5173"] for dev
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/login")
 
-@router.post("/network_state")
-def get_network_state(data: NetworkStateRequest):
-    network = dict_to_network_state(data.network_data)
-    if not network.lines or not network.nodes:
-        return {"error": "Empty network data"}
-    network = calculate_power_flow(network)
-    return network
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+def get_current_player(
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db),
+):
+    payload = decode_access_token(token)
+    if not payload or "sub" not in payload:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    username = payload["sub"]
+    player = db.query(Player).filter(Player.username == username).first()
+    if not player:
+        raise HTTPException(status_code=401, detail="User not found")
+
+    return player
 
 
-@router.post("/reset_network")
-def reset_network():
-    network = generate_network()
-    return network
+@router.post("/register")
+def register(data: RegisterRequest, db: Session = Depends(get_db)):
+    existing = db.query(Player).filter(Player.username == data.username).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Username already exists")
 
-
-@router.post("/switch_node")
-def switch_node(data: SwitchNodeRequest):
-    network = dict_to_network_state(data.network_data)
-    # switch_id has the format "L[from_id]-[to_id]_[from/to]"
-    line_id, direction = (data.switch_id.split("_")[0], data.switch_id.split("_")[1])
-    if line_id not in network.lines:
-        return {"error": "Invalid switch ID"}
-    new_state = update_network(
-        deepcopy(network),
-        TopologyChangeRequest(
-            line_id=line_id,
-            direction=direction,
-        ),
+    player = Player(
+        username=data.username,
+        password_hash=hash_password(data.password),
     )
-    new_state = calculate_power_flow(new_state)
-    if math.isnan(new_state.cost):
-        return {"error": "Switching this line creates an unsolvable network"}
-    network = new_state
-    return network
+    db.add(player)
+    db.commit()
+    db.refresh(player)
+
+    token = create_access_token({"sub": player.username})
+
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "player": {
+            "username": player.username,
+            "current_level": player.current_level,
+            "unlocked_levels": player.get_unlocked_levels(),
+        },
+    }
+
+@router.post("/login")
+def login(data: LoginRequest, db: Session = Depends(get_db)):
+    player = db.query(Player).filter(Player.username == data.username).first()
+    if not player or not verify_password(data.password, player.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    token = create_access_token({"sub": player.username})
+
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "player": {
+            "username": player.username,
+            "current_level": player.current_level,
+            "unlocked_levels": player.get_unlocked_levels(),
+        },
+    }
 
 
-@router.post("/reset_switches")
-def reset_switches(data: ResetSwitchesRequest):
-    network = dict_to_network_state(data.network_data)
-    for line in list(network.lines.values()):
-        if line.from_node == data.node_id + "b":
-            network = update_network(
-                network,
-                TopologyChangeRequest(
-                    line_id=line.id,
-                    direction="from",
-                ),
-            )
-        if line.to_node == data.node_id + "b":
-            network = update_network(
-                network,
-                TopologyChangeRequest(
-                    line_id=line.id,
-                    direction="to",
-                ),
-            )
-    network = calculate_power_flow(network)
-    return network
+@router.post("/save_progress")
+def save_progress(
+    data: ProgressUpdateRequest,
+    player: Player = Depends(get_current_player),
+    db: Session = Depends(get_db),
+):
+    player.current_level = data.current_level
+    player.unlocked_levels = data.unlocked_levels
+
+    db.commit()
+    return {"status": "ok"}
+
+@router.get("/me", response_model=PlayerResponse)
+def get_me(player: Player = Depends(get_current_player)):
+    return PlayerResponse(
+        username=player.username,
+        current_level=player.current_level,
+        unlocked_levels=player.get_unlocked_levels(),
+    )
 
 
 @router.post("/solve")
@@ -111,18 +155,35 @@ def solve_net(data: NetworkStateRequest):
 #         json.dump(network, f)
 #     return {"status": "Network saved", "file": filepath}
 
-
-@router.post("/load_network")
-def load_network(file_path: str):
-    network = update_network_from_file(file_path)
-    network = calculate_power_flow(network)
-    return network
+# # CAREFUL: THIS IS UNSAFE SINCE ANY FILE PATH CAN BE GIVEN
+# @router.post("/load_network")
+# def load_network(file_path: str):
+#     network = update_network_from_file(file_path)
+#     network = calculate_power_flow(network)
+#     return network
 
 
 @router.post("/load_level")
-def load_level_endpoint(data: LoadLevelRequest):
+def load_level_endpoint(
+    data: LoadLevelRequest,
+    player: Player = Depends(get_current_player),
+    db: Session = Depends(get_db),
+):
+    if data.level_num > player.unlocked_levels:
+        raise HTTPException(
+            status_code=403,
+            detail="Level not unlocked",
+        )
+
+    # Load the level
     network = load_level(data.level_num, tutorial=data.is_tutorial)
+
+    # Update current level if progressing
+    player.current_level = data.level_num
+    db.commit()
+
     return network
+
 
 
 app.include_router(router)

@@ -12,6 +12,7 @@ class Node(BaseModel):
 
 
 class Line(BaseModel):
+    # TODO: add from_bus and to_bus
     id: str
     from_node: str
     to_node: str
@@ -82,3 +83,21 @@ def dict_to_network_state(data: dict) -> NetworkState:
         for line_id, line_data in data.get("lines", {}).items()
     }
     return NetworkState(nodes=nodes, lines=lines, cost=data.get("cost", 10**6), tutorial=data.get("tutorial", False), level=data.get("level", None), tutorial_info=data.get("tutorial_info", None))
+
+class RegisterRequest(BaseModel):
+    username: str
+    password: str
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+class PlayerResponse(BaseModel):
+    username: str
+    current_level: int
+    unlocked_levels: int
+
+class ProgressUpdateRequest(BaseModel):
+    username: str
+    current_level: int
+    unlocked_levels: int

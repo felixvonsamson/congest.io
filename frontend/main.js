@@ -286,15 +286,6 @@ function focusMainCamera(target) {
   controls.update();
 }
 
-function show_new_network() {
-  fetch('/api/reset_network', { method: 'POST' }).then(response => response.json()).then(data => {
-    updateNetwork(settings, scenes, cameras, data, state, controls, { onToggle });
-    const newNetworkBtn = document.getElementById("newNetworkBtn");
-    newNetworkBtn.disabled = false;
-    newNetworkBtn.textContent = "new Network";
-  });
-}
-
 function next_level() {
   let level = parseInt(sessionStorage.getItem('level'));
   let tutorial = parseInt(sessionStorage.getItem('tutorial'));
@@ -328,13 +319,6 @@ function next_level() {
     nextLevelBtn.textContent = "Next Level";
   });
 }
-
-// const newNetworkBtn = document.getElementById("newNetworkBtn");
-// newNetworkBtn.addEventListener("click", () => {
-//   newNetworkBtn.disabled = true;
-//   newNetworkBtn.textContent = "Loading...";
-//   show_new_network();
-// });
 
 window.addEventListener('keydown', (event) => {
   if (event.key === 's' || event.key === 'S') {

@@ -3,3 +3,6 @@ pydantic
 numpy
 scipy
 uvicorn
+sqlalchemy
+passlib[bcrypt]
+python-jose[cryptography]
