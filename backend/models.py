@@ -11,3 +11,13 @@ class Player(Base):
 
     current_level = Column(Integer, default=1)
     unlocked_levels = Column(Integer, default=1)
+
+    money = Column(Integer, default=100)
+
+    def package_data(self):
+        return {
+            "username": self.username,
+            "current_level": self.current_level,
+            "unlocked_levels": self.unlocked_levels,
+            "money": self.money,
+        }

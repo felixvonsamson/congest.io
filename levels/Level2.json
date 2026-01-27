@@ -1,1 +1,94 @@
-{"nodes": {"0": {"id": "0", "injection": -29.34731151536084, "x": 259.09523674178047, "y": 54.39432601634123}, "1": {"id": "1", "injection": 53.1345719214073, "x": 351.91219014040354, "y": 182.87316971162622}, "2": {"id": "2", "injection": -144.34285471595814, "x": 106.46436700211927, "y": 263.1707759042394}, "3": {"id": "3", "injection": 61.243099036309786, "x": 106.9493725635571, "y": 99.97184846489492}, "4": {"id": "4", "injection": 32.901945532158855, "x": 215.12275718974564, "y": 184.02822917635999}, "5": {"id": "5", "injection": 26.410549741443017, "x": 258.21735468556665, "y": 312.78397711327796}, "1b": {"id": "1b", "injection": 0.0, "x": 351.91219014040354, "y": 182.87316971162622}}, "lines": {"L0-3": {"id": "L0-3", "from_node": "0", "to_node": "3", "flow": -14.485367765801945, "limit": 50.0}, "L0-4": {"id": "L0-4", "from_node": "0", "to_node": "4", "flow": -14.86194374955887, "limit": 50.0}, "L1-4": {"id": "L1-4", "from_node": "1", "to_node": "4", "flow": 27.66067645352865, "limit": 50.0}, "L1-5": {"id": "L1-5", "from_node": "1", "to_node": "5", "flow": 25.473895467878663, "limit": 50.0}, "L2-3": {"id": "L2-3", "from_node": "2", "to_node": "3", "flow": -47.13430725426477, "limit": 50.0}, "L2-4": {"id": "L2-4", "from_node": "2", "to_node": "4", "flow": -47.51088323802169, "limit": 50.0}, "L2-5": {"id": "L2-5", "from_node": "2", "to_node": "5", "flow": -49.69766422367168, "limit": 50.0}, "L3-4": {"id": "L3-4", "from_node": "3", "to_node": "4", "flow": -0.3765759837569256, "limit": 50.0}, "L4-5": {"id": "L4-5", "from_node": "4", "to_node": "5", "flow": -2.186780985649987, "limit": 50.0}, "L0-1b": {"id": "L0-1b", "from_node": "0", "to_node": "1b", "flow": 0.0, "limit": 50.0}}, "cost": 0.0}
+{
+  "nodes": {
+    "0": {
+      "id": "0",
+      "injection": 100.0,
+      "x": 100.0,
+      "y": 250.0
+    },
+    "1": {
+      "id": "1",
+      "injection": 50.0,
+      "x": 250.0,
+      "y": 100.0
+    },
+    "2": {
+      "id": "2",
+      "injection": -110,
+      "x": 400.0,
+      "y": 250.0
+    },
+    "3": {
+      "id": "3",
+      "injection": 50.0,
+      "x": 250.0,
+      "y": 400.0
+    },
+    "4": {
+      "id": "4",
+      "injection": -90.0,
+      "x": 250.0,
+      "y": 250.0
+    }
+  },
+  "lines": {
+    "L0-1": {
+      "id": "L0-1",
+      "from_node": "0",
+      "to_node": "1",
+      "flow": 0.0,
+      "limit": 50.0
+    },
+    "L0-3": {
+      "id": "L0-3",
+      "from_node": "0",
+      "to_node": "3",
+      "flow": 0.0,
+      "limit": 50.0
+    },
+    "L0-4": {
+      "id": "L0-4",
+      "from_node": "0",
+      "to_node": "4",
+      "flow": 0.0,
+      "limit": 50.0
+    },
+    "L1-2": {
+      "id": "L1-2",
+      "from_node": "1",
+      "to_node": "2",
+      "flow": 0.0,
+      "limit": 50.0
+    },
+    "L1-4": {
+      "id": "L1-4",
+      "from_node": "1",
+      "to_node": "4",
+      "flow": 0.0,
+      "limit": 50.0
+    },
+    "L2-3": {
+      "id": "L2-3",
+      "from_node": "2",
+      "to_node": "3",
+      "flow": 0.0,
+      "limit": 50.0
+    },
+    "L2-4": {
+      "id": "L2-4",
+      "from_node": "2",
+      "to_node": "4",
+      "flow": 0.0,
+      "limit": 50.0
+    },
+    "L3-4": {
+      "id": "L3-4",
+      "from_node": "3",
+      "to_node": "4",
+      "flow": 0.0,
+      "limit": 50.0
+    }
+  },
+  "cost": 0.0,
+  "tutorial_info": "Try making a direct link between the largest producer (100) and the largest consumer (-110) by putting both horizontal lines on the second bus bar in the central node. Can you make sense of what is happening?"
+}

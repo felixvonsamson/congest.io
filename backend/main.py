@@ -20,7 +20,7 @@ from .schemas import (
     dict_to_network_state,
     RegisterRequest,
     LoginRequest,
-    PlayerResponse,
+    rewardResponse
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import APIRouter
@@ -92,11 +92,7 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)):
     return {
         "access_token": token,
         "token_type": "bearer",
-        "player": {
-            "username": player.username,
-            "current_level": player.current_level,
-            "unlocked_levels": player.get_unlocked_levels(),
-        },
+        "player": player.package_data()
     }
 
 @router.post("/login")
@@ -110,11 +106,7 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
     return {
         "access_token": token,
         "token_type": "bearer",
-        "player": {
-            "username": player.username,
-            "current_level": player.current_level,
-            "unlocked_levels": player.get_unlocked_levels(),
-        },
+        "player": player.package_data()
     }
 
 
@@ -130,12 +122,39 @@ def save_progress(
     db.commit()
     return {"status": "ok"}
 
-@router.get("/me", response_model=PlayerResponse)
+@router.get("/me")
 def get_me(player: Player = Depends(get_current_player)):
-    return PlayerResponse(
-        username=player.username,
-        current_level=player.current_level,
-        unlocked_levels=player.get_unlocked_levels(),
+    return player.package_data()
+
+@router.post("/check_solution", response_model=rewardResponse)
+def check_solution(
+    data: NetworkStateRequest,
+    player: Player = Depends(get_current_player),
+    db: Session = Depends(get_db),
+):
+    """
+    Checking players solution and rewarding him if he solved a new level
+    """
+    network = dict_to_network_state(data.network_data)
+    network = calculate_power_flow(network)
+
+    all_lines_within_capacity = all(
+        abs(line.flow) <= line.limit for line in network.lines.values()
+    )
+
+    reward = 0
+    # If the player completed a new level, unlock the next level
+    if all_lines_within_capacity:
+        if player.unlocked_levels == player.current_level:
+            player.unlocked_levels += 1
+            reward = 50  # Reward for completing the level
+            player.money += reward
+        db.commit()
+
+    return rewardResponse(
+        solved=all_lines_within_capacity,
+        player_money=player.money, 
+        reward=reward
     )
 
 
@@ -176,7 +195,7 @@ def load_level_endpoint(
         )
 
     # Load the level
-    network = load_level(data.level_num, tutorial=data.is_tutorial)
+    network = load_level(data.level_num)
 
     # Update current level if progressing
     player.current_level = data.level_num

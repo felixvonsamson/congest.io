@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { createNetwork } from './createNetwork.js';
+import { authHeaders } from '../auth/auth.js';
 
 export function updateNetwork(
     settings,
@@ -64,14 +65,27 @@ export function updateNetwork(
     tutorialHelp.textContent = "";
   }
 
-  const solvedOverlay = document.getElementById("solvedOverlay");
-  if (solvedOverlay) {
-    if (network.cost === 0.0) {
+  checkSolution(network);
+}
+
+function checkSolution(network){
+    const solvedOverlay = document.getElementById("solvedOverlay");
+    fetch('/api/check_solution', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ network_data: network })
+    }).then(response => response.json()).then(data => {
+        if (!data.solved) {
+            solvedOverlay.style.display = "none";
+            return;
+        }
+        const player = JSON.parse(sessionStorage.getItem('player'));
+        player.money = data.player_money;
+        document.getElementById('moneyAmount').textContent = player.money + '€';
+        sessionStorage.setItem('player', JSON.stringify(player));
         solvedOverlay.style.display = "block";
-    } else {
-        solvedOverlay.style.display = "none";
-    }
-  }
+        document.getElementById('rewardMessage').textContent = `Reward: ${data.reward}€`;
+    });
 }
 
 export function toggleSwitch(network , switchID) {

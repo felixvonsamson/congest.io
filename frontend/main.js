@@ -6,14 +6,8 @@ import { config } from "./config.js";
 import { updateNetwork, toggleSwitch } from './network/updateNetwork.js';
 import { getViewports } from './ui/viewport_calculations.js';
 import { calculatePowerFlow } from './network/powerFlow.js';
-
-// --- Managing sessions storage ---
-if (!sessionStorage.getItem('level')) {
-  sessionStorage.setItem('level', '0');
-  sessionStorage.setItem('max_level', '0');
-  sessionStorage.setItem('tutorial', '1');
-  sessionStorage.setItem('isTutorial', 'true');
-}
+import { ensureLoggedIn, authHeaders } from './auth/auth.js';
+import { renderOverviewToImage } from './level_image_halper.js';
 
 // --- Settings ---
 const settings = {
@@ -102,27 +96,18 @@ scenes.overview.add(cameraRect);
 async function fetchNetworkPowerflow() {
   let networkData = JSON.parse(sessionStorage.getItem('network'));
   if (!networkData) {
-    let isTutorial = sessionStorage.getItem('isTutorial') === 'true';
-    let levelNum = parseInt(sessionStorage.getItem('level'));
-    if (isTutorial) {
-      levelNum = parseInt(sessionStorage.getItem('tutorial'));
-    }
+    const player = JSON.parse(sessionStorage.getItem('player'));
     const response = await fetch('/api/load_level', {
       method: 'POST',
-      headers: {
-      'Content-Type': 'application/json'
-      },
+      headers: authHeaders(),
       body: JSON.stringify({ 
-        level_num: levelNum, 
-        is_tutorial: isTutorial
+        level_num: player.current_level
       })
     });
-    const data = await response.json();
-    if (data.error) {
-      console.error('Error loading level:', data.error);
-      return;
+    if (!response.ok) {
+      throw new Error('Failed to load level data');
     }
-    networkData = data;
+    networkData = await response.json();
     sessionStorage.setItem('network', JSON.stringify(networkData));
   }
   networkData = calculatePowerFlow(networkData);
@@ -130,13 +115,16 @@ async function fetchNetworkPowerflow() {
 }
 
 // --- Main ---
-fetchNetworkPowerflow().then(data => {
-  updateNetwork(settings, scenes, cameras, data, state, controls, { onToggle });
-  // Show help screen on first tutorial level
-  const helpPanel = document.getElementById("helpPanel");
-  if (data.tutorial && data.level === 1 && data.cost > 0.0) {
-    helpPanel.style.display = "block";
-  }
+ensureLoggedIn().then(ok => {
+  if (!ok) return;
+  fetchNetworkPowerflow().then(data => {
+    updateNetwork(settings, scenes, cameras, data, state, controls, { onToggle });
+    // Show help screen on first tutorial level
+    const helpPanel = document.getElementById("helpPanel");
+    if (data.tutorial && data.level === 1 && data.cost > 0.0) {
+      helpPanel.style.display = "block";
+    }
+  });
 });
 
 function animate() {
@@ -245,7 +233,6 @@ window.addEventListener('click', (event) => {
     const hit = raycaster.ray.intersectPlane(planeZ0, target);
     if (!hit) return;
 
-    console.log("Clicked overview at ", target);
     // --- 5. Move MAIN camera & controls to the clicked region (even if no object) ---
     focusMainCamera(target);
     return;
@@ -287,47 +274,30 @@ function focusMainCamera(target) {
 }
 
 function next_level() {
-  let level = parseInt(sessionStorage.getItem('level'));
-  let tutorial = parseInt(sessionStorage.getItem('tutorial'));
-  let is_tutorial = sessionStorage.getItem('isTutorial') === 'true';
-  let levelNum = 1;
-  if (is_tutorial && tutorial < 2) {
-    tutorial += 1;
-    levelNum = tutorial;
-    sessionStorage.setItem('tutorial', tutorial.toString());
-    is_tutorial = true;
-  } else {
-    is_tutorial = false;
-    sessionStorage.setItem('isTutorial', 'false');
-    level += 1;
-    levelNum = level;
-    sessionStorage.setItem('level', level.toString());
-    if (level > parseInt(sessionStorage.getItem('max_level'))) {
-      sessionStorage.setItem('max_level', level.toString());
-    }
-  }
+  const player = JSON.parse(sessionStorage.getItem('player'));
   fetch('/api/load_level', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ level_num: levelNum, is_tutorial: is_tutorial })
+    headers: authHeaders(),
+    body: JSON.stringify({ level_num: player.current_level + 1 })
   }).then(response => response.json()).then(data => {
+    player.current_level += 1;
+    sessionStorage.setItem('player', JSON.stringify(player));
     updateNetwork(settings, scenes, cameras, data, state, controls, { onToggle });
     const nextLevelBtn = document.getElementById("nextLevelBtn");
     nextLevelBtn.disabled = false;
     nextLevelBtn.textContent = "Next Level";
   });
-}
+};
 
 window.addEventListener('keydown', (event) => {
+  if (document.getElementById('authPanel').style.display !== 'none') {
+    return; // do not handle key events when auth panel is open
+  }
   if (event.key === 's' || event.key === 'S') {
     let network = JSON.parse(sessionStorage.getItem('network'));
     fetch('/api/solve', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers: authHeaders(),
       body: JSON.stringify({ network_data: network })
     })
       .then(response => response.json())
@@ -340,6 +310,9 @@ window.addEventListener('keydown', (event) => {
     //clear session storage and reload page
     sessionStorage.clear();
     location.reload();
+  }
+  if (event.key === "p") {
+    renderOverviewToImage(scenes, config, settings, cameras);
   }
 });
 

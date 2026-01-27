@@ -448,15 +448,10 @@ def solve_network(network):
     return best_state
 
 
-def load_level(level: int, tutorial: bool = False):
-    if tutorial:
-        if level < 1 or level > 2:
-            raise ValueError("Tutorial level must be between 1 and 2")
-        file_path = f"levels/tutorial{level}.json"
-    else:
-        if level < 1 or level > 35:
-            raise ValueError("Level must be between 1 and 35")
-        file_path = f"levels/Level{level}.json"
+def load_level(level: int):
+    if level < 1 or level > 37:
+        raise ValueError("Level must be between 1 and 37")
+    file_path = f"levels/Level{level}.json"
     network = update_network_from_file(file_path)
     network = reset_all_switches(network)
     network = calculate_power_flow(network)

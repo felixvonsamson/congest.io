@@ -38,7 +38,6 @@ class TopologyChangeRequest(BaseModel):
 
 class LoadLevelRequest(BaseModel):
     level_num: int
-    is_tutorial: bool = False
 
 class NetworkStateRequest(BaseModel):
     network_data: dict
@@ -92,12 +91,12 @@ class LoginRequest(BaseModel):
     username: str
     password: str
 
-class PlayerResponse(BaseModel):
-    username: str
-    current_level: int
-    unlocked_levels: int
-
 class ProgressUpdateRequest(BaseModel):
     username: str
     current_level: int
     unlocked_levels: int
+
+class rewardResponse(BaseModel):
+    solved: bool
+    player_money: int
+    reward: int

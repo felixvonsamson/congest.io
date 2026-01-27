@@ -15,9 +15,22 @@
   <div id="labelsOverview"></div>
   <div id="labelsMain"></div>
   <div id="LevelInfoPanel" class="ui-element">Loading...</div>
-  <button id="helpBtn" aria-label="Help" class="ui-element">?</button>
+
+  <div id="topLeftUI">
+    <div class="flex-row">
+      <div id="moneyAmount"></div>
+      <button id="helpBtn" aria-label="Help" class="ui-element">?</button>
+      <button id="menuBtn" aria-label="Menu" class="ui-element button blue"><b>Menu</b></button>
+    </div>
+    <div id="menuButtons" style="display:none;">
+      <button id="levelSelection" class="button grey">Levels</button>
+      <button id="authButton" class="button grey">Login</button>
+    </div>
+  </div>
+  
+
   <div id="helpPanel" class="ui-element" style="display:none">
-    <button id="closeHelpBtn" aria-label="Close help">✕</button>
+    <button id="closeHelpBtn" aria-label="Close help" class="closeBtn">✕</button>
     <h1 style="text-align:center;">Congestion Management Game</h1>
     <img src="./static/images/help.png" alt="Help" style="width:100%;max-height:80vh;object-fit:contain;">
     <p>
@@ -28,13 +41,52 @@
       Each transmission line has a <strong>maximum power limit of 50</strong>.
     </p>
   </div>
+
+  <div id="authPanel" class="ui-element" style="display:none">
+    <button id="closeAuthBtn" aria-label="Close auth" class="closeBtn">✕</button>
+    <div id="authContainer">
+      <div id="loginForm">
+        <h2>Login</h2>
+        <input type="text" placeholder="username" id="loginUsername">
+        <input type="password" placeholder="Password" id="loginPassword">
+        <button id="loginBtn">Login</button>
+        <p>Don't have an account? <a href="#" id="switchToSignup">Sign up</a></p>
+      </div>
+      <div id="signupForm" style="display:none">
+        <h2>Sign Up</h2>
+        <input type="text" placeholder="Username" id="signupUsername">
+        <input type="password" placeholder="Password" id="signupPassword">
+        <input type="password" placeholder="Confirm Password" id="signupConfirmPassword">
+        <button id="signupBtn">Sign Up</button>
+        <p>Already have an account? <a href="#" id="switchToLogin">Login</a></p>
+      </div>
+    </div>
+    <div id="authError" style="color:red;font-size:0.9em;margin-top:8px;"></div>
+  </div>
+
+  <script>
+    document.querySelector('a').addEventListener('click', (e) => {
+      e.preventDefault();
+      document.getElementById('authPanel').style.display = 'block';
+    });
+    document.getElementById('closeAuthBtn').addEventListener('click', () => {
+      document.getElementById('authPanel').style.display = 'none';
+    });
+    document.getElementById('switchToSignup').addEventListener('click', (e) => {
+      e.preventDefault();
+      document.getElementById('loginForm').style.display = 'none';
+      document.getElementById('signupForm').style.display = 'block';
+    });
+    document.getElementById('switchToLogin').addEventListener('click', (e) => {
+      e.preventDefault();
+      document.getElementById('signupForm').style.display = 'none';
+      document.getElementById('loginForm').style.display = 'block';
+    });
+  </script>
   
-  <!-- <button id="newNetworkBtn" aria-label="Create new network" class="ui-element"
-    style="position:fixed;left:12px;bottom:12px;z-index:1000;padding:8px 12px;border-radius:4px;background:#1976d2;color:#fff;border:none;box-shadow:0 2px 6px rgba(0,0,0,0.3);cursor:pointer;font-weight:600;">
-    new Network
-  </button> -->
   <div id="solvedOverlay" class="ui-element">
     <div id="solvedMessage">Solved!</div>
+    <div id="rewardMessage"></div>
     <button id="nextLevelBtn" aria-label="Next level">Next Level</button>
   </div>
   <div id="tutorialHelp" class = "ui-element"></div>
@@ -45,6 +97,18 @@
     });
     document.getElementById('closeHelpBtn').addEventListener('click', () => {
       document.getElementById('helpPanel').style.display = 'none';
+    });
+
+    document.getElementById('menuBtn').addEventListener('click', () => {
+      const panel = document.getElementById('menuButtons');
+      panel.style.display = panel.style.display === 'none' ? 'flex' : 'none';
+    });
+    document.addEventListener('click', (e) => {
+      const menuPanel = document.getElementById('menuButtons');
+      const menuBtn = document.getElementById('menuBtn');
+      if (!menuPanel.contains(e.target) && !menuBtn.contains(e.target)) {
+        menuPanel.style.display = 'none';
+      }
     });
   </script>
 
