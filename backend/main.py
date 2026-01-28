@@ -153,7 +153,7 @@ def check_solution(
 
     return rewardResponse(
         solved=all_lines_within_capacity,
-        player_money=player.money, 
+        player=player.package_data(), 
         reward=reward
     )
 

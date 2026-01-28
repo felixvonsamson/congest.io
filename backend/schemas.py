@@ -98,5 +98,5 @@ class ProgressUpdateRequest(BaseModel):
 
 class rewardResponse(BaseModel):
     solved: bool
-    player_money: int
+    player: dict
     reward: int

@@ -79,8 +79,8 @@ function checkSolution(network){
             solvedOverlay.style.display = "none";
             return;
         }
-        const player = JSON.parse(sessionStorage.getItem('player'));
-        player.money = data.player_money;
+        let player = JSON.parse(sessionStorage.getItem('player'));
+        player = data.player;
         document.getElementById('moneyAmount').textContent = player.money + '€';
         sessionStorage.setItem('player', JSON.stringify(player));
         solvedOverlay.style.display = "block";

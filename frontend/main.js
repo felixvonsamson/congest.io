@@ -289,6 +289,23 @@ function next_level() {
   });
 };
 
+export function load_level(level) {
+    const player = JSON.parse(sessionStorage.getItem('player'));
+    fetch('/api/load_level', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ level_num: level })
+    })
+    .then(res => res.json())
+    .then(data => {
+        player.current_level = level;
+        sessionStorage.setItem('player', JSON.stringify(player));
+        sessionStorage.setItem('network', JSON.stringify(data));
+        updateNetwork(settings, scenes, cameras, data, state, controls, { onToggle });
+    });
+}
+
+
 window.addEventListener('keydown', (event) => {
   if (document.getElementById('authPanel').style.display !== 'none') {
     return; // do not handle key events when auth panel is open
