@@ -35,19 +35,6 @@
     <div id="levelList"></div>
   </div>
 
-  <div id="helpPanel" class="ui-element" style="display:none">
-    <button aria-label="Close help" class="closeBtn" onclick="this.parentElement.style.display='none'">✕</button>
-    <h1 style="text-align:center;">Congestion Management Game</h1>
-    <img src="./static/images/help.png" alt="Help" style="width:100%;max-height:80vh;object-fit:contain;">
-    <p>
-      To prevent overloaded power lines switch them from main nodes to bypass nodes to
-      allow power to be redistributed more efficiently across the network.
-    </p>
-    <p>
-      Each transmission line has a <strong>maximum power limit of 50</strong>.
-    </p>
-  </div>
-
   <div id="authPanel" class="ui-element" style="display:none">
     <button aria-label="Close auth" class="closeBtn" onclick="this.parentElement.style.display='none'">✕</button>
     <div id="authContainer">
@@ -71,10 +58,6 @@
   </div>
 
   <script>
-    document.querySelector('a').addEventListener('click', (e) => {
-      e.preventDefault();
-      document.getElementById('authPanel').style.display = 'block';
-    });
     document.getElementById('switchToSignup').addEventListener('click', (e) => {
       e.preventDefault();
       document.getElementById('loginForm').style.display = 'none';
@@ -95,7 +78,7 @@
   <div id="tutorialHelp" class = "ui-element"></div>
   <script>
     document.getElementById('helpBtn').addEventListener('click', () => {
-      document.getElementById('helpPanel').style.display = document.getElementById('helpPanel').style.display === 'none' ? 'block' : 'none';
+        window.location.href = '/tutorial.html';
     });
 
     document.getElementById('menuBtn').addEventListener('click', () => {

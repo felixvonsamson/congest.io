@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Congestio Tutorial</title>
+  <link rel="stylesheet" href="./styling.css">
+</head>
+
+<body>
+  <script type="module" src="./tutorial.js"></script>
+  <canvas id="webgl"></canvas>
+
+  <div id="labelsMain"></div>
+
+  <div id="topLeftUI">
+      <button id="skipTutorial" aria-label="Skip Tutorial" class="ui-element button blue">Skip Tutorial</button>
+  </div>
+
+  <div id="tutorialHelp" class = "ui-element"></div>
+
+</body>
+
+<script>
+    document.getElementById('skipTutorial').addEventListener('click', () => {
+        window.location.href = '/';
+    });
+</script>
+
+</html>
