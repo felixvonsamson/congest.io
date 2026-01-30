@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import { config } from '../config.js';
-import { createToggle } from '../ui/toggles.js';
+import { createToggle, createArrow } from '../ui/toggles.js';
 
-export function createNetwork(data, state, controls, callbacks, overview = false) {
+export function createNetwork(mode, data, state, controls, callbacks, overview = false) {
 
   const group = new THREE.Group();
 
@@ -70,27 +70,30 @@ export function createNetwork(data, state, controls, callbacks, overview = false
           state.particles.push(mesh.userData.state);
       }
 
-      for (let end of ["from", "to"]) {
-        let type = "normal"
-        if (end === "from" && from.id.includes('b') || end === "to" && to.id.includes('b')) {
-          type = "b"
+      // Toggles at both ends
+      if (mode === 'switches') {
+        for (let end of ["from", "to"]) {
+          let type = "normal"
+          if (end === "from" && from.id.includes('b') || end === "to" && to.id.includes('b')) {
+            type = "b"
+          }
+          const toggleDiv = createToggle(type = type, controls);
+          toggleDiv.addEventListener('click', (event) => {
+            callbacks.onToggle(line.id+"_"+end);
+          });
+          const toggle = new CSS2DObject(toggleDiv);
+          const v_from = new THREE.Vector3(from.x, from.y, 0);
+          const v_to = new THREE.Vector3(to.x, to.y, 0);
+          const v_dir = new THREE.Vector3().subVectors(v_to, v_from).normalize();
+          let v_pos;
+          if (end === "from") {
+            v_pos = v_from.clone().add(v_dir.clone().multiplyScalar(15));
+          } else {
+            v_pos = v_to.clone().add(v_dir.clone().multiplyScalar(-15));
+          }
+          toggle.position.set(v_pos.x, v_pos.y, 0);
+          state.labelsMain.add(toggle);
         }
-        const toggleDiv = createToggle(type = type, controls);
-        toggleDiv.addEventListener('click', (event) => {
-          callbacks.onToggle(line.id+"_"+end);
-        });
-        const toggle = new CSS2DObject(toggleDiv);
-        const v_from = new THREE.Vector3(from.x, from.y, 0);
-        const v_to = new THREE.Vector3(to.x, to.y, 0);
-        const v_dir = new THREE.Vector3().subVectors(v_to, v_from).normalize();
-        let v_pos;
-        if (end === "from") {
-          v_pos = v_from.clone().add(v_dir.clone().multiplyScalar(15));
-        } else {
-          v_pos = v_to.clone().add(v_dir.clone().multiplyScalar(-15));
-        }
-        toggle.position.set(v_pos.x, v_pos.y, 0);
-        state.labelsMain.add(toggle);
       }
     }
   });
@@ -128,6 +131,27 @@ export function createNetwork(data, state, controls, callbacks, overview = false
         const label = new CSS2DObject(divMain);
         label.position.set(node.x, node.y, 0);
         state.labelsMain.add(label);
+
+        if (mode === 'redispatch') {
+          // show increase/decrease arrows
+          for (let direction of ["up", "down"]) {
+            const arrowDiv = createArrow(direction , controls);
+            const toggle = new CSS2DObject(arrowDiv);
+            let yOffset = direction === "up" ? 12 : -12;
+            toggle.position.set(node.x, node.y + yOffset, 0);
+            state.labelsMain.add(toggle);
+            
+            //prices
+            const divPrice = document.createElement('div');
+            divPrice.className = 'label-small';
+            divPrice.textContent = direction === "up" ? node.cost_increase + '€' : node.cost_decrease + '€';
+            divPrice.style.color = 'white';
+            const priceLabel = new CSS2DObject(divPrice);
+            let priceYOffset = direction === "up" ? 12 : -12;
+            priceLabel.position.set(node.x + 12, node.y + priceYOffset, 0);
+            state.labelsMain.add(priceLabel);
+          }
+        }
       }
     }
   });
@@ -188,7 +212,7 @@ const bNodeGeometry = (() => {
   return new THREE.ShapeGeometry(shape, 32);
 })();
 const bNodeMaterial = new THREE.MeshBasicMaterial({
-  color: 0xffffff,
+  color: config.colors.bNode,
   side: THREE.DoubleSide,
   depthWrite: false
 });

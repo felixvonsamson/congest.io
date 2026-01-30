@@ -14,6 +14,7 @@ const settings = {
   overview_viewport: null,
   main_viewport: null,
   aspect: null,
+  mode: 'switches' // or 'redispatch'
 };
 let vp = getViewports(settings);
 let newCamPosition = null;
@@ -217,23 +218,33 @@ controls.addEventListener('change', () => {
   cameraRect.scale.setScalar(1 / cameras.main.zoom);
 });
 
+inputEl.addEventListener('wheel', (event) => {
+  event.preventDefault();
+  mouse = vp.toNDC(event, settings.main_viewport);
+  raycaster.setFromCamera(mouse, cameras.main);
+  const planeZ0 = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+  const target = new THREE.Vector3();
+  const hit = raycaster.ray.intersectPlane(planeZ0, target);
+
+  if (hit) {
+    controls.target.copy(target);
+  }
+
+}, { passive: false });
+
+
 window.addEventListener('click', (event) => {
   // ignore clicks on UI elements
   if (event.target.closest('.ui-element')) return;
+
+  // when clicking in the overview, move the main camera to that position
   if (vp.contains(event, settings.overview_viewport)) {
-    // --- 2. Convert mouse position to NDC for LEFT viewport ---
     mouse = vp.toNDC(event, settings.overview_viewport);
-
-    // --- 3. Raycast from overview camera ---
     raycaster.setFromCamera(mouse, cameras.overview);
-
-    // --- 4. Intersect ray with the z=0 plane (region of the overview) ---
     const planeZ0 = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
     const target = new THREE.Vector3();
     const hit = raycaster.ray.intersectPlane(planeZ0, target);
     if (!hit) return;
-
-    // --- 5. Move MAIN camera & controls to the clicked region (even if no object) ---
     focusMainCamera(target);
     return;
   }
@@ -246,7 +257,7 @@ window.addEventListener('click', (event) => {
     if (!intersects.length) return;
 
     for (const inter of intersects) {
-      if (inter.object.userData && inter.object.userData.id) {
+      if (inter.object.userData && inter.object.userData.id && settings.mode === 'switches') {
         // call reset endpoint for that node
         let network = JSON.parse(sessionStorage.getItem('network'));
         // for all lines in the network, check if the from_node or to_node is inter.object.userData.id + "b" and if it is the case switch the switch back on the main node
@@ -360,3 +371,19 @@ document.getElementById('nextLevelBtn').addEventListener('click', () => {
   nextLevelBtn.textContent = 'Loading...';
   next_level();
 });
+
+document.getElementById('useRedispatch').addEventListener('click', () => {
+  document.getElementById('useRedispatch').style.display = 'none';
+  document.getElementById('validateRedispatch').style.display = 'block';
+  document.getElementById('cancelRedispatch').style.display = 'block';
+  settings.mode = 'redispatch';
+  updateNetwork(settings, scenes, cameras, JSON.parse(sessionStorage.getItem('network')), state, controls, { onToggle });
+});
+
+document.getElementById('cancelRedispatch').addEventListener('click', () => {
+  document.getElementById('useRedispatch').style.display = 'block';
+  document.getElementById('validateRedispatch').style.display = 'none';
+  document.getElementById('cancelRedispatch').style.display = 'none';
+  settings.mode = 'switches';
+  updateNetwork(settings, scenes, cameras, JSON.parse(sessionStorage.getItem('network')), state, controls, { onToggle });
+})

@@ -19,8 +19,8 @@ export function updateNetwork(
     state.particleMeshes = [];
     state.labelsMain.clear();
     state.labelsOverview.clear();
-    state.mainNetwork = createNetwork(network, state, controls, callbacks);
-    state.overviewNetwork = createNetwork(network, state, controls, callbacks, true);
+    state.mainNetwork = createNetwork(settings.mode, network, state, controls, callbacks);
+    state.overviewNetwork = createNetwork(settings.mode, network, state, controls, callbacks, true);
 
     scenes.main.add(state.mainNetwork);
     scenes.overview.add(state.overviewNetwork);
@@ -55,6 +55,7 @@ export function updateNetwork(
     }
   }
 
+  // TODO: probably not needed anymore
   // Update tutorial help
   const tutorialHelp = document.getElementById("tutorialHelp");
   if (network.tutorial && network.tutorial_info) {

@@ -6,6 +6,7 @@ export const config = {
     background: 0x202020,
     nodeProd: 0x5744ff,
     nodeCons: 0xff4444,
+    bNode: 0xbbbbbb,
     line: 0xbbbbbb,
     lineOverload: 0xff0000,
   },

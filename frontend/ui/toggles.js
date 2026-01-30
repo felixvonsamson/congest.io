@@ -1,11 +1,16 @@
 export function createToggle(type = 'normal', controls) {
-  let backgroundColor = type === 'b' ? 'rgba(200, 200, 200, 0.2)' : 'rgba(200, 200, 200, 0.9)';
-  let borderColor = type === 'b' ? 'rgba(200, 200, 200, 0.9)' : 'rgba(200, 200, 200, 0.2)';
   const div = document.createElement('div');
   div.className = 'line-toggle';
   if (type === 'b') {
       div.classList.add('on');
   }
+  attachToggleEvents(div, controls);
+  return div;
+}
+
+export function createArrow(direction, controls) {
+  const div = document.createElement('div');
+  div.className = 'arrow-' + direction;
   attachToggleEvents(div, controls);
   return div;
 }

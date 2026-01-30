@@ -9,6 +9,8 @@ class Node(BaseModel):
     injection: float = 0.0
     x: float = 0.0
     y: float = 0.0
+    cost_increase: int = 0
+    cost_decrease: int = 0
 
 
 class Line(BaseModel):
