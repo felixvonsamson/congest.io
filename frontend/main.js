@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { MapControls } from 'three/examples/jsm/controls/MapControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 
 import { config } from "./config.js";
@@ -69,9 +69,13 @@ document.getElementById('labelsMain').appendChild(labelRendererMain.domElement);
 
 // --- Controls ---
 const inputEl = document.getElementById('labelsMain');
-const controls = new OrbitControls(cameras.main, inputEl);
-controls.touches.ONE = THREE.TOUCH.PAN;
-controls.enableRotate = false;  // no rotation
+const controls = new MapControls(cameras.main, inputEl);
+// TODO : check if folloing line is needed for smartphones
+//controls.touches.ONE = THREE.TOUCH.PAN;
+controls.enableRotate = false;
+controls.enableZoom = false; 
+controls.screenSpacePanning = true;
+controls.enableDamping = false;
 controls.target.set(250, 250, 0);
 controls.update();
 
@@ -223,12 +227,23 @@ inputEl.addEventListener('wheel', (event) => {
   mouse = vp.toNDC(event, settings.main_viewport);
   raycaster.setFromCamera(mouse, cameras.main);
   const planeZ0 = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
-  const target = new THREE.Vector3();
-  const hit = raycaster.ray.intersectPlane(planeZ0, target);
+  const worldBefore = new THREE.Vector3();
+  if(!raycaster.ray.intersectPlane(planeZ0, worldBefore)) return;
 
-  if (hit) {
-    controls.target.copy(target);
-  }
+  const zoomSpeed = 0.0015;
+  const zoomFactor = Math.exp(-event.deltaY * zoomSpeed);
+
+  cameras.main.zoom = THREE.MathUtils.clamp(cameras.main.zoom * zoomFactor, 0.2, 10);
+  cameras.main.updateProjectionMatrix();
+
+  raycaster.setFromCamera(mouse, cameras.main);
+  const worldAfter = new THREE.Vector3();
+  raycaster.ray.intersectPlane(planeZ0, worldAfter);
+
+  const delta = worldBefore.sub(worldAfter);
+  cameras.main.position.add(delta);
+  controls.target.add(delta);
+  controls.update();
 
 }, { passive: false });
 
