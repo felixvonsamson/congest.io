@@ -78,7 +78,7 @@ export function createNetwork(mode, data, state, controls, callbacks, overview =
             type = "b"
           }
           const toggleDiv = createToggle(type = type, controls);
-          toggleDiv.addEventListener('click', (event) => {
+          toggleDiv.addEventListener('click', () => {
             callbacks.onToggle(line.id+"_"+end);
           });
           const toggle = new CSS2DObject(toggleDiv);
@@ -136,6 +136,9 @@ export function createNetwork(mode, data, state, controls, callbacks, overview =
           // show increase/decrease arrows
           for (let direction of ["up", "down"]) {
             const arrowDiv = createArrow(direction , controls);
+            arrowDiv.addEventListener('click', () => {
+              callbacks.changeInjection(node.id, direction);
+            });
             const toggle = new CSS2DObject(arrowDiv);
             let yOffset = direction === "up" ? 12 : -12;
             toggle.position.set(node.x, node.y + yOffset, 0);
@@ -150,6 +153,17 @@ export function createNetwork(mode, data, state, controls, callbacks, overview =
             let priceYOffset = direction === "up" ? 12 : -12;
             priceLabel.position.set(node.x + 12, node.y + priceYOffset, 0);
             state.labelsMain.add(priceLabel);
+          }
+          // adjustment
+          if (node.id in data.redispatch.adjustments && data.redispatch.adjustments[node.id] !== 0) {
+            const divAdj = document.createElement('div');
+            divAdj.className = 'label';
+            let adj = data.redispatch.adjustments[node.id];
+            divAdj.textContent = `(${(adj > 0 ? '+' : '') + adj.toFixed(0)})`;
+            divAdj.style.color = 'white';
+            const adjLabel = new CSS2DObject(divAdj);
+            adjLabel.position.set(node.x + 15, node.y, 0);
+            state.labelsMain.add(adjLabel);
           }
         }
       }

@@ -123,7 +123,7 @@ async function fetchNetworkPowerflow() {
 ensureLoggedIn().then(ok => {
   if (!ok) return;
   fetchNetworkPowerflow().then(data => {
-    updateNetwork(settings, scenes, cameras, data, state, controls, { onToggle });
+    updateNetwork(settings, scenes, cameras, data, state, controls, { onToggle, changeInjection });
     // Show help screen on first tutorial level
     const helpPanel = document.getElementById("helpPanel");
     if (data.tutorial && data.level === 1 && data.cost > 0.0) {
@@ -272,20 +272,38 @@ window.addEventListener('click', (event) => {
     if (!intersects.length) return;
 
     for (const inter of intersects) {
-      if (inter.object.userData && inter.object.userData.id && settings.mode === 'switches') {
+      if (inter.object.userData && inter.object.userData.id) {
         // call reset endpoint for that node
         let network = JSON.parse(sessionStorage.getItem('network'));
-        // for all lines in the network, check if the from_node or to_node is inter.object.userData.id + "b" and if it is the case switch the switch back on the main node
-        for (const line of Object.values(network.lines)) {
-          if (line.from_node === inter.object.userData.id + "b") {
-            network = toggleSwitch(network, line.id + "_from");
+        if (settings.mode === 'switches') {
+          // for all lines in the network, check if the from_node or to_node is inter.object.userData.id + "b" and if it is the case switch the switch back on the main node
+          for (const line of Object.values(network.lines)) {
+            if (line.from_node === inter.object.userData.id + "b") {
+              network = toggleSwitch(network, line.id + "_from");
+            }
+            if (line.to_node === inter.object.userData.id + "b") {
+              network = toggleSwitch(network, line.id + "_to");
+            }
           }
-          if (line.to_node === inter.object.userData.id + "b") {
-            network = toggleSwitch(network, line.id + "_to");
+        } else if (settings.mode === 'redispatch') {
+          // reset injection to original value
+          const node = network.nodes[inter.object.userData.id];
+          const adjustment = network.redispatch.adjustments[inter.object.userData.id] || 0;
+          node.injection -= adjustment;
+          network.redispatch.cost -= adjustment * (adjustment > 0 ? node.cost_increase : -node.cost_decrease);
+          network.redispatch.unbalance -= adjustment;
+          delete network.redispatch.adjustments[inter.object.userData.id];
+          document.getElementById('validateRedispatch').textContent = `${network.redispatch.cost.toFixed(0)}€`;
+          if (network.redispatch.unbalance === 0) {
+            document.getElementById('redispatchUnbalance').textContent = '';
+            document.getElementById('validateRedispatch').disabled = false;
+          } else {
+            document.getElementById('redispatchUnbalance').textContent = `Power unbalance: ${network.redispatch.unbalance}`;
+            document.getElementById('validateRedispatch').disabled = true;
           }
         }
         network = calculatePowerFlow(network);
-        updateNetwork(settings, scenes, cameras, network, state, controls, { onToggle });
+        updateNetwork(settings, scenes, cameras, network, state, controls, { onToggle, changeInjection });
         return;
       }
     }
@@ -308,7 +326,7 @@ function next_level() {
   }).then(response => response.json()).then(data => {
     player.current_level += 1;
     sessionStorage.setItem('player', JSON.stringify(player));
-    updateNetwork(settings, scenes, cameras, data, state, controls, { onToggle });
+    updateNetwork(settings, scenes, cameras, data, state, controls, { onToggle, changeInjection });
     const nextLevelBtn = document.getElementById("nextLevelBtn");
     nextLevelBtn.disabled = false;
     nextLevelBtn.textContent = "Next Level";
@@ -327,7 +345,7 @@ export function load_level(level) {
         player.current_level = level;
         sessionStorage.setItem('player', JSON.stringify(player));
         sessionStorage.setItem('network', JSON.stringify(data));
-        updateNetwork(settings, scenes, cameras, data, state, controls, { onToggle });
+        updateNetwork(settings, scenes, cameras, data, state, controls, { onToggle, changeInjection });
     });
 }
 
@@ -345,7 +363,7 @@ window.addEventListener('keydown', (event) => {
     })
       .then(response => response.json())
       .then(data => {
-        updateNetwork(settings, scenes, cameras, data, state, controls, { onToggle });
+        updateNetwork(settings, scenes, cameras, data, state, controls, { onToggle, changeInjection });
       })
       .catch(err => console.error('solve failed', err));
   }
@@ -369,7 +387,39 @@ function onToggle(switchID) {
     network = toggleSwitch(network, switchID);
     network = calculatePowerFlow(network);
   }
-  updateNetwork(settings, scenes, cameras, network, state, controls, { onToggle });
+  updateNetwork(settings, scenes, cameras, network, state, controls, { onToggle, changeInjection });
+}
+
+function changeInjection(nodeID, direction) {
+  let network = JSON.parse(sessionStorage.getItem('network'));
+  const changeAmount = direction === "up" ? 1 : -1;
+  network.nodes[nodeID].injection += changeAmount;
+  network.redispatch.adjustments[nodeID] = (network.redispatch.adjustments[nodeID] || 0) + changeAmount;
+  network.redispatch.cost = calculateReadjustmentCost(network);
+  network.redispatch.unbalance += changeAmount;
+  document.getElementById('validateRedispatch').textContent = `${network.redispatch.cost.toFixed(0)}€`;
+  if (network.redispatch.unbalance === 0) {
+    document.getElementById('redispatchUnbalance').textContent = '';
+    document.getElementById('validateRedispatch').disabled = false;
+  }else{
+    document.getElementById('redispatchUnbalance').textContent = `Power unbalance: ${network.redispatch.unbalance}`;
+    document.getElementById('validateRedispatch').disabled = true;
+  }
+  network = calculatePowerFlow(network);
+  updateNetwork(settings, scenes, cameras, network, state, controls, { onToggle, changeInjection });
+}
+
+function calculateReadjustmentCost(network){
+  let totalCost = 0;
+  for (const [nodeID, adjustment] of Object.entries(network.redispatch.adjustments)) {
+    const node = network.nodes[nodeID];
+    if (adjustment > 0) {
+      totalCost += adjustment * node.cost_increase;
+    } else {
+      totalCost += adjustment * -node.cost_decrease;
+    }
+  }
+  return totalCost;
 }
 
 function showErrorToast(message) {
@@ -389,10 +439,12 @@ document.getElementById('nextLevelBtn').addEventListener('click', () => {
 
 document.getElementById('useRedispatch').addEventListener('click', () => {
   document.getElementById('useRedispatch').style.display = 'none';
+  document.getElementById('redispatchCost').style.display = 'none';
   document.getElementById('validateRedispatch').style.display = 'block';
   document.getElementById('cancelRedispatch').style.display = 'block';
   settings.mode = 'redispatch';
-  updateNetwork(settings, scenes, cameras, JSON.parse(sessionStorage.getItem('network')), state, controls, { onToggle });
+  sessionStorage.setItem('network_before_redispatch', sessionStorage.getItem('network'));
+  updateNetwork(settings, scenes, cameras, JSON.parse(sessionStorage.getItem('network')), state, controls, { onToggle, changeInjection });
 });
 
 document.getElementById('cancelRedispatch').addEventListener('click', () => {
@@ -400,5 +452,18 @@ document.getElementById('cancelRedispatch').addEventListener('click', () => {
   document.getElementById('validateRedispatch').style.display = 'none';
   document.getElementById('cancelRedispatch').style.display = 'none';
   settings.mode = 'switches';
-  updateNetwork(settings, scenes, cameras, JSON.parse(sessionStorage.getItem('network')), state, controls, { onToggle });
-})
+  sessionStorage.setItem('network', sessionStorage.getItem('network_before_redispatch'));
+  document.getElementById('redispatchUnbalance').textContent = '';
+  document.getElementById('validateRedispatch').disabled = false;
+  document.getElementById('validateRedispatch').textContent = '0€';
+  updateNetwork(settings, scenes, cameras, JSON.parse(sessionStorage.getItem('network')), state, controls, { onToggle, changeInjection });
+});
+
+document.getElementById('validateRedispatch').addEventListener('click', () => {
+  document.getElementById('useRedispatch').style.display = 'block';
+  document.getElementById('validateRedispatch').style.display = 'none';
+  document.getElementById('cancelRedispatch').style.display = 'none';
+  settings.mode = 'switches';
+  document.getElementById('validateRedispatch').textContent = '0€';
+  updateNetwork(settings, scenes, cameras, JSON.parse(sessionStorage.getItem('network')), state, controls, { onToggle, changeInjection });
+});

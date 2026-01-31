@@ -26,7 +26,11 @@ class NetworkState(BaseModel):
     nodes: dict[str, Node]
     lines: dict[str, Line]
     cost: float = 10**6
-    tutorial: bool = False
+    redispatch: dict = {
+        "cost": 0.0,
+        "unbalance": 0.0,
+        "adjustments": {}
+    }
     level: Optional[int] = None
     tutorial_info: Optional[str] = None
 
@@ -67,12 +71,12 @@ def update_network_from_file(file_path: str) -> NetworkState:
         for line_id, line_data in data.get("lines", {}).items()
     }
     level = None if "Level" not in file_path else int(file_path.split("Level")[-1].split(".")[0])
-    if "tutorial" in file_path:
-        tutorial = True
-        level = int(file_path.split("tutorial")[-1].split(".")[0])
-    else:
-        tutorial = False
-    return NetworkState(nodes=nodes, lines=lines, level=level, tutorial=tutorial, tutorial_info=data.get("tutorial_info", None))
+    return NetworkState(
+        nodes=nodes, 
+        lines=lines,
+        level=level, 
+        tutorial_info=data.get("tutorial_info", None)
+        )
 
 def dict_to_network_state(data: dict) -> NetworkState:
     nodes = {
@@ -83,7 +87,14 @@ def dict_to_network_state(data: dict) -> NetworkState:
         line_id: Line(**line_data)
         for line_id, line_data in data.get("lines", {}).items()
     }
-    return NetworkState(nodes=nodes, lines=lines, cost=data.get("cost", 10**6), tutorial=data.get("tutorial", False), level=data.get("level", None), tutorial_info=data.get("tutorial_info", None))
+    return NetworkState(
+        nodes=nodes, 
+        lines=lines, 
+        cost=data.get("cost", 10**6), 
+        redispatch=data.get("redispatch", {"cost": 0.0, "unbalance": 0.0, "adjustments": {}}), 
+        level=data.get("level", None), 
+        tutorial_info=data.get("tutorial_info", None)
+        )
 
 class RegisterRequest(BaseModel):
     username: str

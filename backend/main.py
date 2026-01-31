@@ -135,6 +135,7 @@ def check_solution(
     """
     Checking players solution and rewarding him if he solved a new level
     """
+    #TDOO: Check that network is valid
     network = dict_to_network_state(data.network_data)
     network = calculate_power_flow(network)
 
@@ -142,13 +143,20 @@ def check_solution(
         abs(line.flow) <= line.limit for line in network.lines.values()
     )
 
+    redispatch_cost = 0
+    for node_id, adjustement in network.redispatch["adjustments"].items():
+        if adjustement > 0:
+            redispatch_cost += adjustement * network.nodes[node_id].cost_increase
+        else:
+            redispatch_cost += -adjustement * network.nodes[node_id].cost_decrease
+
     reward = 0
     # If the player completed a new level, unlock the next level
     if all_lines_within_capacity:
         if player.unlocked_levels == player.current_level:
             player.unlocked_levels += 1
             reward = 50  # Reward for completing the level
-            player.money += reward
+        player.money += reward - redispatch_cost
         db.commit()
 
     return rewardResponse(

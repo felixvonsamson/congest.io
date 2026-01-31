@@ -31,7 +31,7 @@ a {
     font-family: sans-serif;
     font-size: 22px;
     font-weight: bold;
-    text-shadow: 0 0 12px rgb(20, 20, 20), 0 0 6px black;
+    text-shadow: 0 0 24px black,0 0 12px black, 0 0 6px black, 0 0 3px black;
 }
 
 .label-small {
@@ -39,7 +39,7 @@ a {
     font-family: sans-serif;
     font-size: 14px;
     font-weight: bold;
-    text-shadow: 0 0 12px rgb(20, 20, 20), 0 0 6px black;
+    text-shadow: 0 0 24px black,0 0 12px black, 0 0 6px black, 0 0 3px black;
 }
 
 #LevelInfoPanel {
@@ -160,6 +160,11 @@ a {
     background: #d32f2f;
 }
 
+.button:disabled {
+    background: #777777;
+    cursor: not-allowed;
+}
+
 .error-toast {
     position: fixed;
     bottom: 20px;
@@ -215,8 +220,12 @@ a {
     bottom: 12px;
     right: 12px;
     z-index: 1000;
+    color: #fff;
+    font-family: 'Trebuchet MS';
+    font-size: 20px;
     display: flex;
-    flex-direction: row;
+    flex-direction: column;
+    align-items: center;
     gap: 8px;
 }
 
@@ -369,6 +378,7 @@ a {
   border-left: 20px solid transparent;
   border-right: 20px solid transparent;
   border-bottom: 20px solid white;
+
 }
 
 .arrow-down {
@@ -377,4 +387,16 @@ a {
   border-left: 20px solid transparent;
   border-right: 20px solid transparent;
   border-top: 20px solid white;
+}
+
+.arrow-up:hover {
+    border-left: 24px solid transparent;
+    border-right: 24px solid transparent;
+    border-bottom: 24px solid #bbbbbb;
+}
+
+.arrow-down:hover{
+    border-left: 24px solid transparent;
+    border-right: 24px solid transparent;
+    border-top: 24px solid #bbbbbb;
 }

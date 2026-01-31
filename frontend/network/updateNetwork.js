@@ -66,6 +66,17 @@ export function updateNetwork(
     tutorialHelp.textContent = "";
   }
 
+  if (network.redispatch.cost != 0 && settings.mode !== "redispatch"){
+    document.getElementById('redispatchCost').style.display = 'block';
+    document.getElementById('redispatchCost').textContent = `(${network.redispatch.cost}€)`;
+  } else {
+    document.getElementById('redispatchCost').style.display = 'none';
+  }
+
+  if(network.cost !== 0 || settings.mode === "redispatch"){
+    document.getElementById("solvedOverlay").style.display = "none";
+    return;
+  }
   checkSolution(network);
 }
 
