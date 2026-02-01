@@ -6,3 +6,4 @@ uvicorn
 sqlalchemy
 passlib[bcrypt]
 python-jose[cryptography]
+bcrypt<4.0.0
