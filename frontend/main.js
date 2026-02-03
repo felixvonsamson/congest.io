@@ -71,7 +71,7 @@ document.getElementById('labelsMain').appendChild(labelRendererMain.domElement);
 const inputEl = document.getElementById('labelsMain');
 const controls = new MapControls(cameras.main, inputEl);
 // TODO : check if folloing line is needed for smartphones
-//controls.touches.ONE = THREE.TOUCH.PAN;
+controls.touches.ONE = THREE.TOUCH.PAN;
 controls.enableRotate = false;
 controls.enableZoom = false; 
 controls.screenSpacePanning = true;
