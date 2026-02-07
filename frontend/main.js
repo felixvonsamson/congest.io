@@ -33,6 +33,10 @@ const state = {
   particleMeshes: []
 };
 
+let pinchStartDist = 0;
+let pinchStartZoom = 1;
+let pinchWorldCenter = new THREE.Vector3();
+
 // --- Create the overview and main scene with camera and renderer ---
 const scenes = {
   overview: new THREE.Scene(),
@@ -233,7 +237,7 @@ inputEl.addEventListener('wheel', (event) => {
   const zoomSpeed = 0.0015;
   const zoomFactor = Math.exp(-event.deltaY * zoomSpeed);
 
-  cameras.main.zoom = THREE.MathUtils.clamp(cameras.main.zoom * zoomFactor, 0.2, 10);
+  cameras.main.zoom = THREE.MathUtils.clamp(cameras.main.zoom * zoomFactor, 0.2, 5);
   cameras.main.updateProjectionMatrix();
 
   raycaster.setFromCamera(mouse, cameras.main);
@@ -246,6 +250,74 @@ inputEl.addEventListener('wheel', (event) => {
   controls.update();
 
 }, { passive: false });
+
+function touchDistance(t1, t2) {
+  const dx = t1.clientX - t2.clientX;
+  const dy = t1.clientY - t2.clientY;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+function touchMidpoint(t1, t2) {
+  return {
+    x: (t1.clientX + t2.clientX) * 0.5,
+    y: (t1.clientY + t2.clientY) * 0.5
+  };
+}
+
+inputEl.addEventListener('touchstart', (e) => {
+  if (e.touches.length !== 2) return;
+
+  e.preventDefault();
+
+  pinchStartDist = touchDistance(e.touches[0], e.touches[1]);
+  pinchStartZoom = cameras.main.zoom;
+
+  const mid = touchMidpoint(e.touches[0], e.touches[1]);
+  const mouse = vp.toNDC(mid, settings.main_viewport);
+
+  raycaster.setFromCamera(mouse, cameras.main);
+
+  const planeZ0 = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+  raycaster.ray.intersectPlane(planeZ0, pinchWorldCenter);
+}, { passive: false });
+
+
+inputEl.addEventListener('touchmove', (e) => {
+  if (e.touches.length !== 2) return;
+
+  e.preventDefault();
+
+  const dist = touchDistance(e.touches[0], e.touches[1]);
+  const zoomFactor = dist / pinchStartDist;
+
+  cameras.main.zoom = THREE.MathUtils.clamp(
+    pinchStartZoom * zoomFactor,
+    0.2,
+    10
+  );
+  cameras.main.updateProjectionMatrix();
+
+  const mid = touchMidpoint(e.touches[0], e.touches[1]);
+  const mouse = vp.toNDC(mid, settings.main_viewport);
+
+  raycaster.setFromCamera(mouse, cameras.main);
+  const worldAfter = new THREE.Vector3();
+
+  const planeZ0 = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+  raycaster.ray.intersectPlane(planeZ0, worldAfter);
+
+  const delta = pinchWorldCenter.clone().sub(worldAfter);
+
+  cameras.main.position.add(delta);
+  controls.target.add(delta);
+  controls.update();
+}, { passive: false });
+
+
+inputEl.addEventListener('touchend', () => {
+  pinchStartDist = 0;
+}, { passive: false });
+
 
 
 window.addEventListener('click', (event) => {
