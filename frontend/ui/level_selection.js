@@ -9,7 +9,7 @@ function populateLevelList() {
         levelDiv.className = 'levelItem';
         levelDiv.innerHTML = `
         <div class="levelItem">
-            <img src=".public/static/level_miniatures/level${i}.png" alt="Level ${i}" class="levelThumbnail">
+            <img src="/static/level_miniatures/level${i}.png" alt="Level ${i}" class="levelThumbnail">
             <div class="levelNumber">${i}</div>
         </div>
         `;
