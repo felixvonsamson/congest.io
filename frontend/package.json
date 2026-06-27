@@ -11,9 +11,8 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
-    "@tweenjs/tween.js": "^25.0.0",
     "ml-matrix": "^6.12.1",
-    "three": "^0.181.2"
+    "pixi.js": "^8.9.2"
   },
   "devDependencies": {
     "vite": "^7.2.6"

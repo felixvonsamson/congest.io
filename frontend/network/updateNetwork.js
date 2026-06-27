@@ -1,174 +1,242 @@
-import * as THREE from 'three';
-import { createNetwork } from './createNetwork.js';
+import { createNetwork, makeBNodeContainer, SPLIT_SCALE } from './createNetwork.js';
 import { authHeaders } from '../auth/auth.js';
 
-export function updateNetwork(
-    settings,
-    scenes,
-    cameras,
-    network,
-    state,
-    controls,
-    callbacks,
-) {
-    sessionStorage.setItem('network', JSON.stringify(network));
-    if (state.mainNetwork) scenes.main.remove(state.mainNetwork);
-    if (state.overviewNetwork) scenes.overview.remove(state.overviewNetwork);
+/**
+ * Rebuild the PixiJS scene from new network data.
+ *
+ * @param {object} ctx  { world, overviewWorld, state, settings, minimapSize }
+ * @param {object} network
+ * @param {object} callbacks  { onToggle, onNodeClick, onResetRedispatch, changeInjection }
+ */
+const ANIM_DURATION = 420; // ms
 
-    state.particles = [];
-    state.particleMeshes = [];
-    state.labelsMain.clear();
-    state.labelsOverview.clear();
-    state.mainNetwork = createNetwork(settings.mode, network, state, controls, callbacks);
-    state.overviewNetwork = createNetwork(settings.mode, network, state, controls, callbacks, true);
+export function updateNetwork(ctx, network, callbacks) {
+  const { world, overviewWorld, state, settings, minimapSize } = ctx;
 
-    scenes.main.add(state.mainNetwork);
-    scenes.overview.add(state.overviewNetwork);
+  // ── Detect b-node appearances / disappearances ─────────────────
+  const prevBNodes = state.prevBNodes ?? {};
+  const newBNodeIds = new Set(Object.keys(network.nodes).filter(id => id.includes('b')));
+  const appearing = [...newBNodeIds].filter(id => !prevBNodes[id]);
+  const disappearing = Object.keys(prevBNodes).filter(id => !newBNodeIds.has(id));
 
-    // Center overview camera on network
-    const max_x = Math.max(...Object.values(network.nodes).map(n => n.x));
-    const min_x = Math.min(...Object.values(network.nodes).map(n => n.x));
-    const max_y = Math.max(...Object.values(network.nodes).map(n => n.y));
-    const min_y = Math.min(...Object.values(network.nodes).map(n => n.y));
-    const center_x = (max_x + min_x) / 2;
-    const center_y = (max_y + min_y) / 2;
-    const size_x = (max_x - min_x) * 1.2;
-    const size_y = (max_y - min_y) * 1.2;
-    const size = Math.max(size_x, size_y);
-    cameras.overview.left = -size / 2;
-    cameras.overview.right = size / 2;
-    cameras.overview.top = size / 2;
-    cameras.overview.bottom = -size / 2;
-    cameras.overview.position.set(center_x, center_y, 500);
-    cameras.overview.lookAt(center_x, center_y, 0);
-    cameras.overview.updateProjectionMatrix();
+  // Remove phantoms from any previous animation cycle
+  for (const ph of (state.phantoms ?? [])) {
+    world.removeChild(ph);
+    ph.destroy();
+  }
+  state.phantoms = [];
+  state.animations = [];
 
-  // Update level indicator
-  const levelIndicator = document.getElementById('LevelInfoPanel');
-  if (network.level === null) {
-    levelIndicator.textContent = `Custom Network`;
-  } else {
-    if (network.tutorial) {
-        levelIndicator.textContent = `Tutorial ${network.level}`;
-    } else {
-        levelIndicator.textContent = `Level ${network.level}`;
-    }
+  sessionStorage.setItem('network', JSON.stringify(network));
+
+  // ── Tear down old scene objects ────────────────────────────────
+  if (state.mainContainer) {
+    world.removeChild(state.mainContainer);
+    state.mainContainer.destroy({ children: true });
+  }
+  if (state.overviewContainer) {
+    overviewWorld.removeChild(state.overviewContainer);
+    state.overviewContainer.destroy({ children: true });
   }
 
-  // TODO: probably not needed anymore
-  // Update tutorial help
-  const tutorialHelp = document.getElementById("tutorialHelp");
-  if (network.tutorial && network.tutorial_info) {
-    tutorialHelp.style.display = "block";
-    tutorialHelp.textContent = network.tutorial_info;
-  } else {
-    tutorialHelp.style.display = "none";
-    tutorialHelp.textContent = "";
+  // ── Build new scene objects ────────────────────────────────────
+  const main = createNetwork(settings.mode, network, callbacks, false);
+  const overview = createNetwork(settings.mode, network, {}, true);
+
+  world.addChild(main.container);
+  overviewWorld.addChild(overview.container);
+
+  state.mainContainer = main.container;
+  state.overviewContainer = overview.container;
+  state.particles = main.particles;
+  state.uiElements = main.uiElements;
+  state.overloadedGfx = main.overloadedGfx;
+
+  // ── Schedule entrance / exit animations ───────────────────────
+  const now = Date.now();
+
+  for (const id of appearing) {
+    const bCont = main.bNodeContainers[id];
+    const mainGfx = main.mainNodeGraphics[id.slice(0, -1)];
+    if (!bCont || !mainGfx) continue;
+    bCont.scale.set(0);
+    state.animations.push({
+      startTime: now,
+      duration: ANIM_DURATION,
+      update(t) {
+        const ease = 1 - Math.pow(1 - t, 3); // easeOut
+        // b-node expands from 0 to its normal size
+        bCont.scale.set(0.5 + 0.5 * ease);
+        // main node shrinks from 1.0 down to SPLIT_SCALE
+        mainGfx.scale.set(1 - (1 - SPLIT_SCALE) * ease);
+      },
+      onDone() { mainGfx.scale.set(SPLIT_SCALE); },
+    });
   }
 
-  if (network.redispatch.cost != 0 && settings.mode !== "redispatch"){
-    document.getElementById('redispatchCost').style.display = 'block';
-    document.getElementById('redispatchCost').textContent = `(${network.redispatch.cost}€)`;
-  } else {
-    document.getElementById('redispatchCost').style.display = 'none';
+  for (const id of disappearing) {
+    const mainGfx = main.mainNodeGraphics[id.slice(0, -1)];
+    const pos = prevBNodes[id];
+    if (!mainGfx || !pos) continue;
+    // New scene's main node starts at SPLIT_SCALE; animate it back up to 1.0
+    mainGfx.scale.set(SPLIT_SCALE);
+    const phantom = makeBNodeContainer(pos.x, pos.y);
+    world.addChild(phantom);
+    state.phantoms.push(phantom);
+    state.animations.push({
+      startTime: now,
+      duration: ANIM_DURATION,
+      update(t) {
+        const ease = 1 - Math.pow(1 - t, 3); // easeOut
+        // phantom ring collapses from SPLIT_SCALE back to 0
+        phantom.scale.set(1 - ease);
+        // main node grows from SPLIT_SCALE back to 1.0
+        mainGfx.scale.set(SPLIT_SCALE + (1 - SPLIT_SCALE) * ease);
+      },
+      onDone() { mainGfx.scale.set(1); },
+    });
   }
 
-  if(network.cost !== 0 || settings.mode === "redispatch"){
-    document.getElementById("solvedOverlay").style.display = "none";
+  // Remember b-node positions for the next call's disappear detection
+  state.prevBNodes = {};
+  for (const [id, node] of Object.entries(network.nodes)) {
+    if (id.includes('b')) state.prevBNodes[id] = { x: node.x, y: node.y };
+  }
+
+  // ── Fit minimap to network bounds ──────────────────────────────
+  const allNodes = Object.values(network.nodes);
+  const xs = allNodes.map(n => n.x);
+  const ys = allNodes.map(n => n.y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const netW = (maxX - minX) || 1;
+  const netH = (maxY - minY) || 1;
+
+  const padding = 20;
+  const avail = minimapSize - padding * 2;
+  const mmScale = Math.min(avail / netW, avail / netH);
+
+  overviewWorld.scale.set(mmScale);
+  overviewWorld.x = padding + (avail - netW * mmScale) / 2 - minX * mmScale;
+  overviewWorld.y = padding + (avail - netH * mmScale) / 2 - minY * mmScale;
+
+  // Expose for viewport-rect drawing in main.js ticker
+  state.minimapTransform = {
+    scale: mmScale,
+    offsetX: overviewWorld.x,
+    offsetY: overviewWorld.y,
+  };
+
+  // ── DOM updates ────────────────────────────────────────────────
+  const levelEl = document.getElementById('LevelInfoPanel');
+  if (network.level == null) {
+    levelEl.textContent = 'Custom Network';
+  } else {
+    levelEl.textContent = network.tutorial
+      ? `Tutorial ${network.level}`
+      : `Level ${network.level}`;
+  }
+
+  const tutEl = document.getElementById('tutorialHelp');
+  if (network.tutorial_info) {
+    tutEl.style.display = 'block';
+    tutEl.textContent = network.tutorial_info;
+  } else {
+    tutEl.style.display = 'none';
+    tutEl.textContent = '';
+  }
+
+  const costEl = document.getElementById('redispatchCost');
+  if (network.redispatch?.cost && network.redispatch.cost !== 0 && settings.mode !== 'redispatch') {
+    costEl.style.display = 'block';
+    costEl.textContent = `(${network.redispatch.cost}€)`;
+  } else {
+    costEl.style.display = 'none';
+  }
+
+  // ── Solved check ───────────────────────────────────────────────
+  if (network.cost !== 0 || settings.mode === 'redispatch') {
+    document.getElementById('solvedOverlay').style.display = 'none';
     return;
   }
   checkSolution(network);
 }
 
-function checkSolution(network){
-    const solvedOverlay = document.getElementById("solvedOverlay");
-    fetch('/api/check_solution', {
-        method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify({ network_data: network })
-    }).then(response => response.json()).then(data => {
-        if (!data.solved) {
-            solvedOverlay.style.display = "none";
-            return;
-        }
-        let player = JSON.parse(sessionStorage.getItem('player'));
-        player = data.player;
-        document.getElementById('moneyAmount').textContent = player.money + '€';
-        sessionStorage.setItem('player', JSON.stringify(player));
-        solvedOverlay.style.display = "block";
-        document.getElementById('rewardMessage').textContent = `Reward: ${data.reward}€`;
+
+function checkSolution(network) {
+  const solvedOverlay = document.getElementById('solvedOverlay');
+  fetch('/api/check_solution', {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ network_data: network }),
+  })
+    .then(r => r.json())
+    .then(data => {
+      if (!data.solved) {
+        solvedOverlay.style.display = 'none';
+        return;
+      }
+      const player = data.player;
+      document.getElementById('moneyAmount').textContent = player.money + '€';
+      sessionStorage.setItem('player', JSON.stringify(player));
+      solvedOverlay.style.display = 'block';
+      document.getElementById('rewardMessage').textContent = `Reward: ${data.reward}€`;
     });
 }
 
-export function toggleSwitch(network , switchID) {
-  /*
-  Switch the connection to a second node placed at the same location.
-  */
-  const direction = switchID.split("_")[1];
-  const lineID = switchID.split("_")[0];
-  const [from_id, to_id] = lineID.slice(1).split("-");
-  const isToDirection = direction === "to";
 
-  // Parse node IDs
-  const targetNodeId = isToDirection
-      ? to_id
-      : from_id; // remove leading "L"
+/**
+ * Toggle a bus-split switch on the client-side network object.
+ * Pure logic — no rendering concerns.
+ */
+export function toggleSwitch(network, switchID) {
+  const direction = switchID.split('_')[1];
+  const lineID = switchID.split('_')[0];
+  const [from_id, to_id] = lineID.slice(1).split('-');
+  const isToDirection = direction === 'to';
 
-  const otherNodeId = isToDirection
-      ? from_id
-      : to_id;
+  const targetNodeId = isToDirection ? to_id : from_id;
+  const otherNodeId = isToDirection ? from_id : to_id;
   let newNode;
 
-  // --- Handle b-node switching ---
-  if (targetNodeId.includes("b")) {
-      // Switching back to original node
-      const originalId = targetNodeId.slice(0, -1);
-      newNode = network.nodes[originalId];
+  if (targetNodeId.includes('b')) {
+    const originalId = targetNodeId.slice(0, -1);
+    newNode = network.nodes[originalId];
 
-      // Delete b-node if only one line is connected
-      let connectionCount = 0;
-      for (const line of Object.values(network.lines)) {
-          if (line.from_node === targetNodeId || line.to_node === targetNodeId) {
-              connectionCount++;
-              if (connectionCount > 1) break;
-          }
+    let connectionCount = 0;
+    for (const line of Object.values(network.lines)) {
+      if (line.from_node === targetNodeId || line.to_node === targetNodeId) {
+        connectionCount++;
+        if (connectionCount > 1) break;
       }
-      if (connectionCount === 1) {
-          delete network.nodes[targetNodeId];
-      }
+    }
+    if (connectionCount === 1) delete network.nodes[targetNodeId];
   } else {
-      const bNodeId = targetNodeId + "b";
-      if (!network.nodes[bNodeId]) {
-          const baseNode = network.nodes[targetNodeId];
-          newNode = {
-              id: bNodeId,
-              injection: 0.0,
-              x: baseNode.x,
-              y: baseNode.y
-          };
-          network.nodes[bNodeId] = newNode;
-      } else {
-          newNode = network.nodes[bNodeId];
-      }
+    const bNodeId = targetNodeId + 'b';
+    if (!network.nodes[bNodeId]) {
+      const base = network.nodes[targetNodeId];
+      newNode = { id: bNodeId, injection: 0.0, x: base.x, y: base.y };
+      network.nodes[bNodeId] = newNode;
+    } else {
+      newNode = network.nodes[bNodeId];
+    }
   }
 
-  // --- Create new line ---
   const newLineId = isToDirection
-      ? `L${from_id}-${newNode.id}`
-      : `L${newNode.id}-${to_id}`;
+    ? `L${from_id}-${newNode.id}`
+    : `L${newNode.id}-${to_id}`;
 
   const oldLine = network.lines[lineID];
-
   network.lines[newLineId] = {
-      id: newLineId,
-      from_node: isToDirection ? otherNodeId : newNode.id,
-      to_node: isToDirection ? newNode.id : otherNodeId,
-      flow: 0.0,
-      limit: oldLine.limit
+    id: newLineId,
+    from_node: isToDirection ? otherNodeId : newNode.id,
+    to_node: isToDirection ? newNode.id : otherNodeId,
+    flow: 0.0,
+    limit: oldLine.limit,
   };
 
-  // --- Remove old line ---
   delete network.lines[lineID];
-
   return network;
 }

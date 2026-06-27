@@ -1,541 +1,454 @@
-import * as THREE from 'three';
-import { MapControls } from 'three/examples/jsm/controls/MapControls.js';
-import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
-
-import { config } from "./config.js";
+import { Application, Container, Graphics } from 'pixi.js';
+import { config } from './config.js';
 import { updateNetwork, toggleSwitch } from './network/updateNetwork.js';
-import { getViewports } from './ui/viewport_calculations.js';
 import { calculatePowerFlow } from './network/powerFlow.js';
+import { particleColor } from './network/createNetwork.js';
 import { ensureLoggedIn, authHeaders } from './auth/auth.js';
 import { renderOverviewToImage } from './level_image_halper.js';
 
-// --- Settings ---
-const settings = {
-  overview_viewport: null,
-  main_viewport: null,
-  aspect: null,
-  mode: 'switches' // or 'redispatch'
-};
-let vp = getViewports(settings);
-let newCamPosition = null;
-let newControlTarget = null;
+const MINIMAP_SIZE = 350;
 
-// --- Objects ---
-let cameraRect = null;
-const raycaster = new THREE.Raycaster();
-let mouse = new THREE.Vector2();
-const state = {
-  mainNetwork: null,
-  overviewNetwork: null,
-  labelsOverview: null,
-  labelsMain: null,
-  particles: [],
-  particleMeshes: []
-};
+// Module-scope so load_level (exported below) can close over them
+// after the async IIFE has finished setup.
+let app, world, ctx, callbacks;
 
-let pinchStartDist = 0;
-let pinchStartZoom = 1;
-let pinchWorldCenter = new THREE.Vector3();
-
-// --- Create the overview and main scene with camera and renderer ---
-const scenes = {
-  overview: new THREE.Scene(),
-  main: new THREE.Scene()
-};
-scenes.overview.background = new THREE.Color(config.colors.background);
-scenes.main.background = new THREE.Color(config.colors.background);
-
-const d = 400;  // size of view volume
-const cameras = {
-  overview: new THREE.OrthographicCamera(),
-  main: new THREE.OrthographicCamera(
-    -d * settings.aspect * 0.3, d * settings.aspect * 0.3,   // left, right
-    d * 0.3, -d * 0.3                      // top, bottom
-  )
-};
-cameras.overview.up.set(0, 1, 0);
-cameras.main.position.set(250, 250, 500);
-cameras.main.up.set(0, 1, 0);
-cameras.main.lookAt(250, 250, 0);
-
-const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('webgl'), antialias: true });
-renderer.setSize(window.innerWidth, window.innerHeight);
-
-// --- Label renderers ---
-state.labelsMain = new THREE.Group();
-state.labelsOverview = new THREE.Group();
-const labelRendererOverview = new CSS2DRenderer();
-const labelRendererMain = new CSS2DRenderer();
-labelRendererOverview.setSize(settings.overview_viewport.w, settings.overview_viewport.h);
-labelRendererMain.setSize(settings.main_viewport.w, settings.main_viewport.h);
-document.getElementById('labelsOverview').appendChild(labelRendererOverview.domElement);
-document.getElementById('labelsMain').appendChild(labelRendererMain.domElement);
-
-// --- Controls ---
-const inputEl = document.getElementById('labelsMain');
-const controls = new MapControls(cameras.main, inputEl);
-// TODO : check if folloing line is needed for smartphones
-controls.touches.ONE = THREE.TOUCH.PAN;
-controls.enableRotate = false;
-controls.enableZoom = false; 
-controls.screenSpacePanning = true;
-controls.enableDamping = false;
-controls.target.set(250, 250, 0);
-controls.update();
-
-// --- Camera rectangle in overview ---
-const rectangleGeometry = new THREE.BufferGeometry();
-const rectWidth = cameras.main.right - cameras.main.left;
-const rectHeight = cameras.main.top - cameras.main.bottom;
-const vertices = new Float32Array([
-  -rectWidth / 2, -rectHeight / 2, 0,
-  rectWidth / 2, -rectHeight / 2, 0,
-  rectWidth / 2, rectHeight / 2, 0,
-  -rectWidth / 2, rectHeight / 2, 0,
-  -rectWidth / 2, -rectHeight / 2, 0
-]);
-rectangleGeometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
-const rectangleMaterial = new THREE.LineBasicMaterial({ color: 'rgb(255, 150, 0)' });
-cameraRect = new THREE.Line(rectangleGeometry, rectangleMaterial);
-cameraRect.position.copy(controls.target);
-cameraRect.renderOrder = 10;  // render on top
-scenes.overview.add(cameraRect);
-
-// --- Fetch network data ---
-async function fetchNetworkPowerflow() {
-  let networkData = JSON.parse(sessionStorage.getItem('network'));
-  if (!networkData) {
-    const player = JSON.parse(sessionStorage.getItem('player'));
-    const response = await fetch('/api/load_level', {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify({ 
-        level_num: player.current_level
-      })
+export function load_level(level) {
+  const player = JSON.parse(sessionStorage.getItem('player'));
+  fetch('/api/load_level', {
+    method:  'POST',
+    headers: authHeaders(),
+    body:    JSON.stringify({ level_num: level }),
+  })
+    .then(r => r.json())
+    .then(data => {
+      player.current_level = level;
+      sessionStorage.setItem('player',  JSON.stringify(player));
+      sessionStorage.setItem('network', JSON.stringify(data));
+      updateNetwork(ctx, data, callbacks);
+      fitCamera(data);
     });
-    if (!response.ok) {
-      throw new Error('Failed to load level data');
-    }
-    networkData = await response.json();
-    sessionStorage.setItem('network', JSON.stringify(networkData));
-  }
-  networkData = calculatePowerFlow(networkData);
-  return networkData;
 }
 
-// --- Main ---
-ensureLoggedIn().then(ok => {
-  if (!ok) return;
-  fetchNetworkPowerflow().then(data => {
-    updateNetwork(settings, scenes, cameras, data, state, controls, { onToggle, changeInjection });
-    // Show help screen on first tutorial level
-    const helpPanel = document.getElementById("helpPanel");
-    if (data.tutorial && data.level === 1 && data.cost > 0.0) {
-      helpPanel.style.display = "block";
-    }
+// ── Async setup ───────────────────────────────────────────────────
+(async () => {
+
+  // ── Main PixiJS app ──────────────────────────────────────────
+  app = new Application();
+  await app.init({
+    resizeTo:        window,
+    backgroundColor: config.colors.background,
+    antialias:       true,
+    resolution:      window.devicePixelRatio || 1,
+    autoDensity:     true,
   });
-});
+  document.getElementById('app').appendChild(app.canvas);
 
-function animate() {
-  requestAnimationFrame(animate);
-  if(newCamPosition && newControlTarget) {
-    // Smoothly interpolate camera position and control target
-    cameras.main.position.lerp(newCamPosition, 0.2);
-    controls.target.lerp(newControlTarget, 0.2);
-    // If close enough, snap to target
-    if (cameras.main.position.distanceTo(newCamPosition) < 0.1 &&
-        controls.target.distanceTo(newControlTarget) < 0.1) {
-      cameras.main.position.copy(newCamPosition);
-      controls.target.copy(newControlTarget);
-      newCamPosition = null;
-      newControlTarget = null;
+  world = new Container();
+  app.stage.addChild(world);
+
+  // ── Minimap PixiJS app ───────────────────────────────────────
+  const minimapApp = new Application();
+  await minimapApp.init({
+    width:           MINIMAP_SIZE,
+    height:          MINIMAP_SIZE,
+    backgroundColor: config.colors.background,
+    antialias:       true,
+    resolution:      window.devicePixelRatio || 1,
+    autoDensity:     true,
+  });
+  // Let CSS scale the canvas to fill the minimap div
+  minimapApp.canvas.style.width  = '100%';
+  minimapApp.canvas.style.height = '100%';
+  document.getElementById('minimap').appendChild(minimapApp.canvas);
+
+  const overviewWorld = new Container();
+  const viewportRect  = new Graphics();
+  minimapApp.stage.addChild(overviewWorld);
+  minimapApp.stage.addChild(viewportRect);   // drawn on top of overview network
+
+  // ── Shared state ─────────────────────────────────────────────
+  const state = {
+    mainContainer:     null,
+    overviewContainer: null,
+    particles:         [],
+    uiElements:        [],   // labels/switches/arrows — inverse-scaled each tick
+    overloadedGfx:     null, // pulsing alpha when lines are congested
+    minimapTransform:  null, // { scale, offsetX, offsetY } set by updateNetwork
+    animations:        [],   // active entrance/exit animations { startTime, duration, update, onDone }
+    phantoms:          [],   // phantom b-node rings currently animating out
+    prevBNodes:        {},   // { id: { x, y } } — b-nodes from last updateNetwork call
+  };
+  const settings = { mode: 'switches' };
+
+  ctx = { world, overviewWorld, state, settings, minimapSize: MINIMAP_SIZE };
+
+  // ── Ticker ───────────────────────────────────────────────────
+  let targetCam = null; // smooth camera destination from minimap click
+
+  app.ticker.add(() => {
+
+    // Smooth camera pan (minimap click)
+    if (targetCam) {
+      world.x += (targetCam.x - world.x) * 0.15;
+      world.y += (targetCam.y - world.y) * 0.15;
+      if (Math.abs(world.x - targetCam.x) < 0.5 && Math.abs(world.y - targetCam.y) < 0.5) {
+        world.x   = targetCam.x;
+        world.y   = targetCam.y;
+        targetCam = null;
+      }
     }
-  }
-  controls.update();
 
-  // Animate flow particles and update labels
-  for (const p of state.particles) {
-    if (p.t !== undefined) {
+    // Bus-split entrance / exit animations
+    if (state.animations.length) {
+      const now = Date.now();
+      state.animations = state.animations.filter(anim => {
+        const t = Math.min(1, (now - anim.startTime) / anim.duration);
+        anim.update(t);
+        if (t >= 1) { anim.onDone?.(); return false; }
+        return true;
+      });
+    }
+
+    // Particle animation
+    for (const p of state.particles) {
       p.t += p.speed * 0.01;
-      if (p.t > 1) p.t = 0;
-      if (p.t < 0) p.t = 1;
+      if (p.t > 1) p.t -= 1;
+      if (p.t < 0) p.t += 1;
+      p.gfx.x    = p.from.x + (p.to.x - p.from.x) * p.t;
+      p.gfx.y    = p.from.y + (p.to.y - p.from.y) * p.t;
+      p.gfx.tint = particleColor(p.from_b, p.to_b, p.t);
     }
-  }
 
-  updateParticlesInGroup(state.mainNetwork, state.particles);
+    // Overloaded lines pulse
+    if (state.overloadedGfx) {
+      state.overloadedGfx.alpha = 0.7 + 0.3 * Math.sin(Date.now() * 0.01);
+    }
 
-  // --- Render interactive camera ---
-  renderer.setViewport(settings.main_viewport.x, settings.main_viewport.y, settings.main_viewport.w, settings.main_viewport.h);
-  renderer.setScissor(settings.main_viewport.x, settings.main_viewport.y, settings.main_viewport.w, settings.main_viewport.h);
-  renderer.setScissorTest(true);
-  renderer.render(scenes.main, cameras.main);
-  
-  // --- Render overview ---
-    renderer.setViewport(settings.overview_viewport.x, settings.overview_viewport.y, settings.overview_viewport.w, settings.overview_viewport.h);
-    renderer.setScissor(settings.overview_viewport.x, settings.overview_viewport.y, settings.overview_viewport.w, settings.overview_viewport.h);
-    renderer.setScissorTest(true);
-    renderer.render(scenes.overview, cameras.overview);
+    // Keep labels / switches / arrows at constant pixel size
+    const inv = 1 / world.scale.x;
+    for (const el of state.uiElements) el.scale.set(inv);
 
-  // --- Render MAIN labels into right half ---
-  labelRendererOverview.render(state.labelsOverview, cameras.overview);
-  labelRendererMain.render(state.labelsMain, cameras.main);
-}
-animate();
-
-function updateParticlesInGroup(group, states) {
-  let i = 0;
-  if (!group) return;
-
-  group.traverse(obj => {
-    if (obj.isMesh && obj.userData?.state?.t !== undefined) {
-      obj.position.lerpVectors(
-        states[i].from,
-        states[i].to,
-        states[i].t
-      );
-      if (states[i].from_b && states[i].to_b) {
-        obj.material.color.setHSL(0.14, 1, 1);
-      } else if (states[i].to_b) {
-        obj.material.color.setHSL(0.14, 1, 0.5 + 0.5 * states[i].t);
-      } else if (states[i].from_b) {
-        obj.material.color.setHSL(0.14, 1, 1 - 0.5 * states[i].t);
-      } else {
-        obj.material.color.setHSL(0.14, 1, 0.5);
-      }
-      i++;
+    // Minimap viewport rectangle
+    if (state.minimapTransform) {
+      const { scale, offsetX, offsetY } = state.minimapTransform;
+      const left   = -world.x / world.scale.x;
+      const top    = -world.y / world.scale.y;
+      const right  = (app.screen.width  - world.x) / world.scale.x;
+      const bottom = (app.screen.height - world.y) / world.scale.y;
+      viewportRect.clear();
+      viewportRect
+        .rect(
+          left  * scale + offsetX,
+          top   * scale + offsetY,
+          (right  - left)  * scale,
+          (bottom - top)   * scale,
+        )
+        .stroke({ width: 1.5, color: config.colors.viewportRect });
     }
   });
-}
 
-// --- Handle resize ---
-window.addEventListener('resize', () => {
-  for (const cam of [cameras.main, cameras.overview]) {
-    settings.aspect = window.innerWidth / window.innerHeight;
-    cam.left = -d * settings.aspect;
-    cam.right = d * settings.aspect;
-    cam.top = d;
-    cam.bottom = -d;
-    cam.updateProjectionMatrix();
-  }
-  renderer.setSize(window.innerWidth, window.innerHeight);
-});
+  // ── Zoom (mouse wheel) ───────────────────────────────────────
+  app.canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const rect   = app.canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    // World point under cursor before zoom
+    const wx     = (mouseX - world.x) / world.scale.x;
+    const wy     = (mouseY - world.y) / world.scale.y;
+    const factor = Math.exp(-e.deltaY * 0.001);
+    const zoom   = Math.max(0.1, Math.min(10, world.scale.x * factor));
+    world.scale.set(zoom);
+    // Shift so the same world point stays under the cursor
+    world.x = mouseX - wx * zoom;
+    world.y = mouseY - wy * zoom;
+  }, { passive: false });
 
-controls.addEventListener('change', () => {
-  // when camera is moved, determine the viewport in the main view and show it in the form of a rectangle in the overview
-  cameraRect.position.copy(controls.target);
-  cameraRect.scale.setScalar(1 / cameras.main.zoom);
-});
+  // ── Pan (pointer drag) ───────────────────────────────────────
+  let dragging  = false;
+  let dragMoved = false;
+  let dragStart = { x: 0, y: 0 };
 
-inputEl.addEventListener('wheel', (event) => {
-  event.preventDefault();
-  mouse = vp.toNDC(event, settings.main_viewport);
-  raycaster.setFromCamera(mouse, cameras.main);
-  const planeZ0 = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
-  const worldBefore = new THREE.Vector3();
-  if(!raycaster.ray.intersectPlane(planeZ0, worldBefore)) return;
+  app.canvas.addEventListener('pointerdown', (e) => {
+    dragging  = true;
+    dragMoved = false;
+    dragStart = { x: e.clientX - world.x, y: e.clientY - world.y };
+  });
+  app.canvas.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    const nx = e.clientX - dragStart.x;
+    const ny = e.clientY - dragStart.y;
+    // Small threshold so a plain tap doesn't micro-jitter the world
+    if (!dragMoved && Math.abs(nx - world.x) < 3 && Math.abs(ny - world.y) < 3) return;
+    dragMoved = true;
+    world.x   = nx;
+    world.y   = ny;
+  });
+  app.canvas.addEventListener('pointerup',    () => { dragging = false; });
+  app.canvas.addEventListener('pointerleave', () => { dragging = false; });
 
-  const zoomSpeed = 0.0015;
-  const zoomFactor = Math.exp(-event.deltaY * zoomSpeed);
+  // ── Pinch zoom (touch) ───────────────────────────────────────
+  let pinchDist0   = 0;
+  let pinchZoom0   = 1;
+  let pinchCenter  = { x: 0, y: 0 };
 
-  cameras.main.zoom = THREE.MathUtils.clamp(cameras.main.zoom * zoomFactor, 0.2, 5);
-  cameras.main.updateProjectionMatrix();
+  app.canvas.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 2) return;
+    e.preventDefault();
+    const [t0, t1]  = e.touches;
+    pinchDist0       = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
+    pinchZoom0       = world.scale.x;
+    const rect       = app.canvas.getBoundingClientRect();
+    const midX       = (t0.clientX + t1.clientX) / 2 - rect.left;
+    const midY       = (t0.clientY + t1.clientY) / 2 - rect.top;
+    pinchCenter      = { x: (midX - world.x) / world.scale.x, y: (midY - world.y) / world.scale.y };
+  }, { passive: false });
 
-  raycaster.setFromCamera(mouse, cameras.main);
-  const worldAfter = new THREE.Vector3();
-  raycaster.ray.intersectPlane(planeZ0, worldAfter);
+  app.canvas.addEventListener('touchmove', (e) => {
+    if (e.touches.length !== 2) return;
+    e.preventDefault();
+    const [t0, t1] = e.touches;
+    const dist      = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
+    const zoom      = Math.max(0.1, Math.min(10, pinchZoom0 * dist / pinchDist0));
+    const rect      = app.canvas.getBoundingClientRect();
+    const midX      = (t0.clientX + t1.clientX) / 2 - rect.left;
+    const midY      = (t0.clientY + t1.clientY) / 2 - rect.top;
+    world.scale.set(zoom);
+    world.x = midX - pinchCenter.x * zoom;
+    world.y = midY - pinchCenter.y * zoom;
+  }, { passive: false });
 
-  const delta = worldBefore.sub(worldAfter);
-  cameras.main.position.add(delta);
-  controls.target.add(delta);
-  controls.update();
+  app.canvas.addEventListener('touchend', () => { pinchDist0 = 0; });
 
-}, { passive: false });
+  // ── Minimap click → smooth camera navigate ───────────────────
+  minimapApp.canvas.addEventListener('pointerdown', (e) => {
+    if (!state.minimapTransform) return;
+    const { scale, offsetX, offsetY } = state.minimapTransform;
+    const rect   = minimapApp.canvas.getBoundingClientRect();
+    // Normalize click to internal canvas resolution (CSS may have scaled it)
+    const localX = (e.clientX - rect.left) * (MINIMAP_SIZE / rect.width);
+    const localY = (e.clientY - rect.top)  * (MINIMAP_SIZE / rect.height);
+    const worldX = (localX - offsetX) / scale;
+    const worldY = (localY - offsetY) / scale;
+    targetCam = {
+      x: app.screen.width  / 2 - worldX * world.scale.x,
+      y: app.screen.height / 2 - worldY * world.scale.y,
+    };
+  });
 
-function touchDistance(t1, t2) {
-  const dx = t1.clientX - t2.clientX;
-  const dy = t1.clientY - t2.clientY;
-  return Math.sqrt(dx * dx + dy * dy);
-}
+  // ── Keyboard shortcuts ───────────────────────────────────────
+  window.addEventListener('keydown', (e) => {
+    if (document.getElementById('authPanel').style.display !== 'none') return;
 
-function touchMidpoint(t1, t2) {
-  return {
-    x: (t1.clientX + t2.clientX) * 0.5,
-    y: (t1.clientY + t2.clientY) * 0.5
-  };
-}
-
-inputEl.addEventListener('touchstart', (e) => {
-  if (e.touches.length !== 2) return;
-
-  e.preventDefault();
-
-  pinchStartDist = touchDistance(e.touches[0], e.touches[1]);
-  pinchStartZoom = cameras.main.zoom;
-
-  const mid = touchMidpoint(e.touches[0], e.touches[1]);
-  const mouse = vp.toNDC(mid, settings.main_viewport);
-
-  raycaster.setFromCamera(mouse, cameras.main);
-
-  const planeZ0 = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
-  raycaster.ray.intersectPlane(planeZ0, pinchWorldCenter);
-}, { passive: false });
-
-
-inputEl.addEventListener('touchmove', (e) => {
-  if (e.touches.length !== 2) return;
-
-  e.preventDefault();
-
-  const dist = touchDistance(e.touches[0], e.touches[1]);
-  const zoomFactor = dist / pinchStartDist;
-
-  cameras.main.zoom = THREE.MathUtils.clamp(
-    pinchStartZoom * zoomFactor,
-    0.2,
-    10
-  );
-  cameras.main.updateProjectionMatrix();
-
-  const mid = touchMidpoint(e.touches[0], e.touches[1]);
-  const mouse = vp.toNDC(mid, settings.main_viewport);
-
-  raycaster.setFromCamera(mouse, cameras.main);
-  const worldAfter = new THREE.Vector3();
-
-  const planeZ0 = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
-  raycaster.ray.intersectPlane(planeZ0, worldAfter);
-
-  const delta = pinchWorldCenter.clone().sub(worldAfter);
-
-  cameras.main.position.add(delta);
-  controls.target.add(delta);
-  controls.update();
-}, { passive: false });
-
-
-inputEl.addEventListener('touchend', () => {
-  pinchStartDist = 0;
-}, { passive: false });
-
-
-
-window.addEventListener('click', (event) => {
-  // ignore clicks on UI elements
-  if (event.target.closest('.ui-element')) return;
-
-  // when clicking in the overview, move the main camera to that position
-  if (vp.contains(event, settings.overview_viewport)) {
-    mouse = vp.toNDC(event, settings.overview_viewport);
-    raycaster.setFromCamera(mouse, cameras.overview);
-    const planeZ0 = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
-    const target = new THREE.Vector3();
-    const hit = raycaster.ray.intersectPlane(planeZ0, target);
-    if (!hit) return;
-    focusMainCamera(target);
-    return;
-  }
-  if (vp.contains(event, settings.main_viewport)) {
-    mouse = vp.toNDC(event, settings.main_viewport);
-
-    // raycast against main scene using main camera
-    raycaster.setFromCamera(mouse, cameras.main);
-    const intersects = raycaster.intersectObjects(scenes.main.children, true);
-    if (!intersects.length) return;
-
-    for (const inter of intersects) {
-      if (inter.object.userData && inter.object.userData.id) {
-        // call reset endpoint for that node
-        let network = JSON.parse(sessionStorage.getItem('network'));
-        if (settings.mode === 'switches') {
-          // for all lines in the network, check if the from_node or to_node is inter.object.userData.id + "b" and if it is the case switch the switch back on the main node
-          for (const line of Object.values(network.lines)) {
-            if (line.from_node === inter.object.userData.id + "b") {
-              network = toggleSwitch(network, line.id + "_from");
-            }
-            if (line.to_node === inter.object.userData.id + "b") {
-              network = toggleSwitch(network, line.id + "_to");
-            }
-          }
-        } else if (settings.mode === 'redispatch') {
-          // reset injection to original value
-          const node = network.nodes[inter.object.userData.id];
-          const adjustment = network.redispatch.adjustments[inter.object.userData.id] || 0;
-          node.injection -= adjustment;
-          network.redispatch.cost -= adjustment * (adjustment > 0 ? node.cost_increase : -node.cost_decrease);
-          network.redispatch.unbalance -= adjustment;
-          delete network.redispatch.adjustments[inter.object.userData.id];
-          document.getElementById('validateRedispatch').textContent = `${network.redispatch.cost.toFixed(0)}€`;
-          if (network.redispatch.unbalance === 0) {
-            document.getElementById('redispatchUnbalance').textContent = '';
-            document.getElementById('validateRedispatch').disabled = false;
-          } else {
-            document.getElementById('redispatchUnbalance').textContent = `Power unbalance: ${network.redispatch.unbalance}`;
-            document.getElementById('validateRedispatch').disabled = true;
-          }
-        }
-        network = calculatePowerFlow(network);
-        updateNetwork(settings, scenes, cameras, network, state, controls, { onToggle, changeInjection });
-        return;
-      }
+    // S — auto-solve
+    if (e.key === 's' || e.key === 'S') {
+      const network = JSON.parse(sessionStorage.getItem('network'));
+      fetch('/api/solve', {
+        method:  'POST',
+        headers: authHeaders(),
+        body:    JSON.stringify({ network_data: network }),
+      })
+        .then(r => r.json())
+        .then(data => updateNetwork(ctx, data, callbacks))
+        .catch(err => console.error('solve failed', err));
     }
-  };
-});
 
-function focusMainCamera(target) {
-  const offset = new THREE.Vector3(0, 0, 200);
-  newCamPosition = target.clone().add(offset);
-  newControlTarget = target;
-  controls.update();
+    // C — clear session and reload
+    if (e.key === 'c' || e.key === 'C') {
+      sessionStorage.clear();
+      location.reload();
+    }
+
+    // P — screenshot the minimap
+    if (e.key === 'p' || e.key === 'P') {
+      renderOverviewToImage(minimapApp, MINIMAP_SIZE);
+    }
+  });
+
+  // ── Game callbacks ───────────────────────────────────────────
+  callbacks = {
+
+    onToggle(switchID) {
+      let network = JSON.parse(sessionStorage.getItem('network'));
+      network = toggleSwitch(network, switchID);
+      network = calculatePowerFlow(network);
+      if (network.cost === Infinity) {
+        showErrorToast(
+          '<b>Action blocked:</b> This switch would cut off part of the grid.<br>' +
+          'Every node must remain connected to ensure power can flow through the system.',
+        );
+        network = toggleSwitch(network, switchID);
+        network = calculatePowerFlow(network);
+      }
+      updateNetwork(ctx, network, callbacks);
+    },
+
+    onNodeClick(nodeId) {
+      // Reset all bus-split switches on this node back to the main bus
+      let network = JSON.parse(sessionStorage.getItem('network'));
+      for (const line of Object.values(network.lines)) {
+        if (line.from_node === nodeId + 'b') network = toggleSwitch(network, line.id + '_from');
+        if (line.to_node   === nodeId + 'b') network = toggleSwitch(network, line.id + '_to');
+      }
+      network = calculatePowerFlow(network);
+      updateNetwork(ctx, network, callbacks);
+    },
+
+    onResetRedispatch(nodeId) {
+      let network = JSON.parse(sessionStorage.getItem('network'));
+      const node  = network.nodes[nodeId];
+      const adj   = network.redispatch.adjustments[nodeId] || 0;
+      node.injection               -= adj;
+      network.redispatch.cost      -= adj * (adj > 0 ? node.cost_increase : -node.cost_decrease);
+      network.redispatch.unbalance -= adj;
+      delete network.redispatch.adjustments[nodeId];
+      syncRedispatchUI(network);
+      network = calculatePowerFlow(network);
+      updateNetwork(ctx, network, callbacks);
+    },
+
+    changeInjection(nodeId, direction) {
+      let network  = JSON.parse(sessionStorage.getItem('network'));
+      const delta  = direction === 'up' ? 1 : -1;
+      const node   = network.nodes[nodeId];
+      node.injection += delta;
+      network.redispatch.adjustments[nodeId] =
+        (network.redispatch.adjustments[nodeId] || 0) + delta;
+      network.redispatch.cost      = calcRedispatchCost(network);
+      network.redispatch.unbalance += delta;
+      syncRedispatchUI(network);
+      network = calculatePowerFlow(network);
+      updateNetwork(ctx, network, callbacks);
+    },
+  };
+
+  // ── Button wiring ────────────────────────────────────────────
+  document.getElementById('nextLevelBtn').addEventListener('click', () => {
+    const btn       = document.getElementById('nextLevelBtn');
+    btn.disabled    = true;
+    btn.textContent = 'Loading…';
+    next_level();
+  });
+
+  document.getElementById('useRedispatch').addEventListener('click', () => {
+    sessionStorage.setItem('network_before_redispatch', sessionStorage.getItem('network'));
+    settings.mode = 'redispatch';
+    document.getElementById('useRedispatch').style.display      = 'none';
+    document.getElementById('redispatchCost').style.display     = 'none';
+    document.getElementById('validateRedispatch').style.display = 'block';
+    document.getElementById('cancelRedispatch').style.display   = 'block';
+    updateNetwork(ctx, JSON.parse(sessionStorage.getItem('network')), callbacks);
+  });
+
+  document.getElementById('cancelRedispatch').addEventListener('click', () => {
+    settings.mode = 'switches';
+    sessionStorage.setItem('network', sessionStorage.getItem('network_before_redispatch'));
+    document.getElementById('useRedispatch').style.display      = 'block';
+    document.getElementById('validateRedispatch').style.display = 'none';
+    document.getElementById('cancelRedispatch').style.display   = 'none';
+    document.getElementById('redispatchUnbalance').textContent  = '';
+    document.getElementById('validateRedispatch').textContent   = '0€';
+    document.getElementById('validateRedispatch').disabled      = false;
+    updateNetwork(ctx, JSON.parse(sessionStorage.getItem('network')), callbacks);
+  });
+
+  document.getElementById('validateRedispatch').addEventListener('click', () => {
+    settings.mode = 'switches';
+    document.getElementById('useRedispatch').style.display      = 'block';
+    document.getElementById('validateRedispatch').style.display = 'none';
+    document.getElementById('cancelRedispatch').style.display   = 'none';
+    document.getElementById('validateRedispatch').textContent   = '0€';
+    updateNetwork(ctx, JSON.parse(sessionStorage.getItem('network')), callbacks);
+  });
+
+  // ── Initial level load ───────────────────────────────────────
+  const loggedIn = await ensureLoggedIn();
+  if (!loggedIn) return;
+
+  let network = JSON.parse(sessionStorage.getItem('network'));
+  if (!network) {
+    const player   = JSON.parse(sessionStorage.getItem('player'));
+    const response = await fetch('/api/load_level', {
+      method:  'POST',
+      headers: authHeaders(),
+      body:    JSON.stringify({ level_num: player.current_level }),
+    });
+    network = await response.json();
+    sessionStorage.setItem('network', JSON.stringify(network));
+  }
+
+  network = calculatePowerFlow(network);
+  updateNetwork(ctx, network, callbacks);
+  fitCamera(network);
+
+})(); // end async IIFE
+
+
+// ── Helpers (module-scope, close over app/world set in IIFE) ─────
+
+function fitCamera(network) {
+  const nodes  = Object.values(network.nodes);
+  const xs     = nodes.map(n => n.x);
+  const ys     = nodes.map(n => n.y);
+  const minX   = Math.min(...xs);
+  const maxX   = Math.max(...xs);
+  const minY   = Math.min(...ys);
+  const maxY   = Math.max(...ys);
+  const netW   = (maxX - minX) || 1;
+  const netH   = (maxY - minY) || 1;
+  const pad    = 120;
+  const zoom   = Math.min(
+    (app.screen.width  - pad * 2) / netW,
+    (app.screen.height - pad * 2) / netH,
+    4,
+  );
+  world.scale.set(zoom);
+  world.x = app.screen.width  / 2 - ((minX + maxX) / 2) * zoom;
+  world.y = app.screen.height / 2 - ((minY + maxY) / 2) * zoom;
 }
 
 function next_level() {
   const player = JSON.parse(sessionStorage.getItem('player'));
   fetch('/api/load_level', {
-    method: 'POST',
+    method:  'POST',
     headers: authHeaders(),
-    body: JSON.stringify({ level_num: player.current_level + 1 })
-  }).then(response => response.json()).then(data => {
-    player.current_level += 1;
-    sessionStorage.setItem('player', JSON.stringify(player));
-    updateNetwork(settings, scenes, cameras, data, state, controls, { onToggle, changeInjection });
-    const nextLevelBtn = document.getElementById("nextLevelBtn");
-    nextLevelBtn.disabled = false;
-    nextLevelBtn.textContent = "Next Level";
-  });
-};
-
-export function load_level(level) {
-    const player = JSON.parse(sessionStorage.getItem('player'));
-    fetch('/api/load_level', {
-        method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify({ level_num: level })
-    })
-    .then(res => res.json())
+    body:    JSON.stringify({ level_num: player.current_level + 1 }),
+  })
+    .then(r => r.json())
     .then(data => {
-        player.current_level = level;
-        sessionStorage.setItem('player', JSON.stringify(player));
-        sessionStorage.setItem('network', JSON.stringify(data));
-        updateNetwork(settings, scenes, cameras, data, state, controls, { onToggle, changeInjection });
+      player.current_level += 1;
+      sessionStorage.setItem('player', JSON.stringify(player));
+      updateNetwork(ctx, data, callbacks);
+      fitCamera(data);
+      const btn       = document.getElementById('nextLevelBtn');
+      btn.disabled    = false;
+      btn.textContent = 'Next Level';
     });
 }
 
-
-window.addEventListener('keydown', (event) => {
-  if (document.getElementById('authPanel').style.display !== 'none') {
-    return; // do not handle key events when auth panel is open
+function calcRedispatchCost(network) {
+  let total = 0;
+  for (const [id, adj] of Object.entries(network.redispatch.adjustments)) {
+    const node = network.nodes[id];
+    total += adj > 0 ? adj * node.cost_increase : -adj * node.cost_decrease;
   }
-  if (event.key === 's' || event.key === 'S') {
-    let network = JSON.parse(sessionStorage.getItem('network'));
-    fetch('/api/solve', {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify({ network_data: network })
-    })
-      .then(response => response.json())
-      .then(data => {
-        updateNetwork(settings, scenes, cameras, data, state, controls, { onToggle, changeInjection });
-      })
-      .catch(err => console.error('solve failed', err));
-  }
-  if (event.key =='c') {
-    //clear session storage and reload page
-    sessionStorage.clear();
-    location.reload();
-  }
-  if (event.key === "p") {
-    renderOverviewToImage(scenes, config, settings, cameras);
-  }
-});
-
-function onToggle(switchID) {
-  let network = JSON.parse(sessionStorage.getItem('network'));
-  network = toggleSwitch(network, switchID);
-  network = calculatePowerFlow(network);
-  if (network.cost === Infinity) {
-    showErrorToast("This switch would cut off part of the grid.");
-    // Revert the switch toggle
-    network = toggleSwitch(network, switchID);
-    network = calculatePowerFlow(network);
-  }
-  updateNetwork(settings, scenes, cameras, network, state, controls, { onToggle, changeInjection });
+  return total;
 }
 
-function changeInjection(nodeID, direction) {
-  let network = JSON.parse(sessionStorage.getItem('network'));
-  const changeAmount = direction === "up" ? 1 : -1;
-  network.nodes[nodeID].injection += changeAmount;
-  network.redispatch.adjustments[nodeID] = (network.redispatch.adjustments[nodeID] || 0) + changeAmount;
-  network.redispatch.cost = calculateReadjustmentCost(network);
-  network.redispatch.unbalance += changeAmount;
-  document.getElementById('validateRedispatch').textContent = `${network.redispatch.cost.toFixed(0)}€`;
-  if (network.redispatch.unbalance === 0) {
-    document.getElementById('redispatchUnbalance').textContent = '';
-    document.getElementById('validateRedispatch').disabled = false;
-  }else{
-    document.getElementById('redispatchUnbalance').textContent = `Power unbalance: ${network.redispatch.unbalance}`;
-    document.getElementById('validateRedispatch').disabled = true;
-  }
-  network = calculatePowerFlow(network);
-  updateNetwork(settings, scenes, cameras, network, state, controls, { onToggle, changeInjection });
+function syncRedispatchUI(network) {
+  const unbalance = network.redispatch.unbalance;
+  const cost      = network.redispatch.cost;
+  const balEl     = document.getElementById('redispatchUnbalance');
+  const valBtn    = document.getElementById('validateRedispatch');
+  balEl.textContent  = unbalance !== 0 ? `Power unbalance: ${unbalance}` : '';
+  valBtn.disabled    = unbalance !== 0;
+  valBtn.textContent = `${cost.toFixed(0)}€`;
 }
 
-function calculateReadjustmentCost(network){
-  let totalCost = 0;
-  for (const [nodeID, adjustment] of Object.entries(network.redispatch.adjustments)) {
-    const node = network.nodes[nodeID];
-    if (adjustment > 0) {
-      totalCost += adjustment * node.cost_increase;
-    } else {
-      totalCost += adjustment * -node.cost_decrease;
-    }
-  }
-  return totalCost;
-}
-
-function showErrorToast(message) {
-  const toast = document.createElement('div');
+function showErrorToast(html) {
+  const toast     = document.createElement('div');
   toast.className = 'error-toast';
-  toast.innerHTML = "<b>Action blocked:</b> This switch would cut off part of the grid.<br>Every node must remain connected to ensure power can flow through the system.";
+  toast.innerHTML = html;
   document.body.appendChild(toast);
   setTimeout(() => toast.remove(), 4000);
 }
-
-document.getElementById('nextLevelBtn').addEventListener('click', () => {
-  const nextLevelBtn = document.getElementById('nextLevelBtn');
-  nextLevelBtn.disabled = true;
-  nextLevelBtn.textContent = 'Loading...';
-  next_level();
-});
-
-document.getElementById('useRedispatch').addEventListener('click', () => {
-  document.getElementById('useRedispatch').style.display = 'none';
-  document.getElementById('redispatchCost').style.display = 'none';
-  document.getElementById('validateRedispatch').style.display = 'block';
-  document.getElementById('cancelRedispatch').style.display = 'block';
-  settings.mode = 'redispatch';
-  sessionStorage.setItem('network_before_redispatch', sessionStorage.getItem('network'));
-  updateNetwork(settings, scenes, cameras, JSON.parse(sessionStorage.getItem('network')), state, controls, { onToggle, changeInjection });
-});
-
-document.getElementById('cancelRedispatch').addEventListener('click', () => {
-  document.getElementById('useRedispatch').style.display = 'block';
-  document.getElementById('validateRedispatch').style.display = 'none';
-  document.getElementById('cancelRedispatch').style.display = 'none';
-  settings.mode = 'switches';
-  sessionStorage.setItem('network', sessionStorage.getItem('network_before_redispatch'));
-  document.getElementById('redispatchUnbalance').textContent = '';
-  document.getElementById('validateRedispatch').disabled = false;
-  document.getElementById('validateRedispatch').textContent = '0€';
-  updateNetwork(settings, scenes, cameras, JSON.parse(sessionStorage.getItem('network')), state, controls, { onToggle, changeInjection });
-});
-
-document.getElementById('validateRedispatch').addEventListener('click', () => {
-  document.getElementById('useRedispatch').style.display = 'block';
-  document.getElementById('validateRedispatch').style.display = 'none';
-  document.getElementById('cancelRedispatch').style.display = 'none';
-  settings.mode = 'switches';
-  document.getElementById('validateRedispatch').textContent = '0€';
-  updateNetwork(settings, scenes, cameras, JSON.parse(sessionStorage.getItem('network')), state, controls, { onToggle, changeInjection });
-});

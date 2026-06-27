@@ -4,17 +4,20 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Electric Grid Visualization</title>
+  <title>congest.io</title>
   <link rel="stylesheet" href="./styling.css">
 </head>
 
 <body>
   <script type="module" src="./main.js"></script>
   <script type="module" src="./ui/level_selection.js"></script>
-  <canvas id="webgl"></canvas>
 
-  <div id="labelsOverview"></div>
-  <div id="labelsMain"></div>
+  <!-- PixiJS appends its canvas here -->
+  <div id="app"></div>
+
+  <!-- Minimap (second PixiJS app) -->
+  <div id="minimap"></div>
+
   <div id="LevelInfoPanel" class="ui-element">Loading...</div>
 
   <div id="topRightUI">
@@ -38,7 +41,7 @@
       <button id="cancelRedispatch" class="button red" style="display:none">Cancel</button>
     </div>
   </div>
-  
+
   <div id="levelSelectionPanel" class="ui-element" style="display:none">
     <button aria-label="Close level selection" class="closeBtn" onclick="this.parentElement.style.display='none'">✕</button>
     <h1 style="text-align:center;">Levels</h1>
@@ -79,16 +82,18 @@
       document.getElementById('loginForm').style.display = 'block';
     });
   </script>
-  
+
   <div id="solvedOverlay" class="ui-element">
     <div id="solvedMessage">Solved!</div>
     <div id="rewardMessage"></div>
     <button id="nextLevelBtn" aria-label="Next level" class="button blue">Next Level</button>
   </div>
-  <div id="tutorialHelp" class = "ui-element"></div>
+
+  <div id="tutorialHelp" class="ui-element"></div>
+
   <script>
     document.getElementById('helpBtn').addEventListener('click', () => {
-        window.location.href = '/tutorial.html';
+      window.location.href = '/tutorial.html';
     });
 
     document.getElementById('menuBtn').addEventListener('click', () => {

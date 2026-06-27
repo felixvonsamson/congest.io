@@ -1,232 +1,321 @@
-import * as THREE from 'three';
-import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
+import { Container, Graphics, Text, Circle, Rectangle } from 'pixi.js';
 import { config } from '../config.js';
-import { createToggle, createArrow } from '../ui/toggles.js';
 
-export function createNetwork(mode, data, state, controls, callbacks, overview = false) {
+// Scale applied to both the main node dot and the b-node ring while a bus-split is active.
+export const SPLIT_SCALE = 0.8;
 
-  const group = new THREE.Group();
+/**
+ * Build PixiJS display objects for a network state.
+ *
+ * @param {'switches'|'redispatch'} mode
+ * @param {object} network
+ * @param {object} callbacks  { onToggle, onNodeClick, onResetRedispatch, changeInjection }
+ * @param {boolean} overview  simplified rendering for the minimap
+ * @returns {{ container, particles, uiElements, overloadedGfx }}
+ *   - container:    add to world / overviewWorld
+ *   - particles:    animate in ticker  { gfx, from, to, t, speed, from_b, to_b }
+ *   - uiElements:   inverse-scale each tick so they stay pixel-constant at any zoom
+ *   - overloadedGfx pulse alpha in ticker when there are overloaded lines
+ */
+export function createNetwork(mode, network, callbacks = {}, overview = false) {
+  const container = new Container();
+  const particles = [];
+  const uiElements = [];
+  const bNodeContainers = {};  // id → Container, needed for entrance animation
+  const mainNodeGraphics = {};  // id → Graphics,   needed for exit/entrance pulse
 
-  Object.values(data.lines).forEach(line => {
-    const from = data.nodes[line.from_node];
-    const to = data.nodes[line.to_node];
+  // ── Layer stack (order = z-order, first = bottom) ─────────────
+  // b-node rings sit behind everything. Lines are drawn above them, but each
+  // line is drawn twice: first a wider background-coloured shadow stroke, then
+  // the actual coloured stroke. The dark border at ring-crossing points makes
+  // it visually clear the line floats above the ring and is not connected to it.
+  const bNodeLayer = new Container(); // individual b-node rings (animated)
+  const lineShadowGfx = new Graphics();  // bg-coloured outline under all lines
+  const normalLinesGfx = new Graphics();
+  const overloadedGfx = new Graphics();  // animated alpha when overloaded
+  const particleLayer = new Container();
+  const nodeLayer = new Container();
+  const uiLayer = new Container(); // labels, switches, arrows
 
-    // Base line
-    const fromVector = new THREE.Vector3(from.x, from.y, 0);
-    const toVector = new THREE.Vector3(to.x, to.y, 0);
-    const direction = new THREE.Vector3().subVectors(toVector, fromVector);
-    const normalizedDirection = direction.clone().normalize().multiplyScalar(config.sizes.ringRadiusOuter);
-    if (from.id.includes('b')) {
-      fromVector.add(normalizedDirection)
-    }
-    if (to.id.includes('b')) {
-      toVector.sub(normalizedDirection);
-    }
-    const lineLength = fromVector.distanceTo(toVector);
-    const center = new THREE.Vector3().addVectors(fromVector, toVector).multiplyScalar(0.5);
-    const angle = Math.atan2(direction.y, direction.x);
-    const lineWidth = overview ? config.sizes.lineWidth*5 : config.sizes.lineWidth;
-    const geometry = new THREE.PlaneGeometry(lineLength, lineWidth);
-    const material = new THREE.LineBasicMaterial({
-      color: Math.abs(line.flow) > line.limit
-        ? config.colors.lineOverload
-        : config.colors.line
-    });
-    const lineRect = new THREE.Mesh(geometry, material);
-    lineRect.position.copy(center);
-    lineRect.rotation.z = angle;
-    lineRect.renderOrder = config.render_order.lines;
-    group.add(lineRect);
+  container.addChild(bNodeLayer);
+  container.addChild(lineShadowGfx);
+  container.addChild(normalLinesGfx);
+  container.addChild(overloadedGfx);
+  container.addChild(particleLayer);
+  container.addChild(nodeLayer);
+  container.addChild(uiLayer);
 
-    // Flow magnitude label using CSS2DObject
-    const div = document.createElement('div');
-    div.className = overview ? 'label-small' : 'label';
-    if (Math.abs(line.flow) >= 49.5 && Math.abs(line.flow) <= 50.5) {
-      div.textContent = Math.abs(line.flow).toFixed(1);
-    } else if (Math.abs(line.flow) >= 49.95 && Math.abs(line.flow) <= 50.05) {
-      div.textContent = Math.abs(line.flow).toFixed(2);
-    } else {
-      div.textContent = Math.abs(line.flow).toFixed(0);
-    }
-    div.style.color = 'yellow';
-    const label = new CSS2DObject(div);
-    label.position.set((from.x + to.x) / 2, (from.y + to.y) / 2, 0);
-    if (overview) {
-      state.labelsOverview.add(label);
-    } else {
-      state.labelsMain.add(label);
-    }
+  const lineWidth = overview ? config.sizes.lineWidth * 4 : config.sizes.lineWidth;
+
+  // ── Lines, particles, switches ─────────────────────────────────
+  for (const line of Object.values(network.lines)) {
+    const from = network.nodes[line.from_node];
+    const to = network.nodes[line.to_node];
+
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const nx = dx / len;
+    const ny = dy / len;
+
+    // Endpoints: shorten to ring edge in main view; go to centre in overview (no ring shown)
+    const bOffset = overview ? 0 : config.sizes.ringRadiusOuter * 0.99;
+    const x1 = from.x + (from.id.includes('b') ? nx * bOffset : 0);
+    const y1 = from.y + (from.id.includes('b') ? ny * bOffset : 0);
+    const x2 = to.x - (to.id.includes('b') ? nx * bOffset : 0);
+    const y2 = to.y - (to.id.includes('b') ? ny * bOffset : 0);
+
+    const overloaded = Math.abs(line.flow) > line.limit;
+    const target = overloaded ? overloadedGfx : normalLinesGfx;
+    const color = overloaded ? config.colors.lineOverload : config.colors.line;
 
     if (!overview) {
-      // Moving particle along the line
-      let length = fromVector.distanceTo(toVector);
-      const n = Math.max(1, Math.floor(length / 10));
+      lineShadowGfx.moveTo(x1, y1).lineTo(x2, y2).stroke({ width: lineWidth + 4, color: config.colors.background });
+    }
+    target.moveTo(x1, y1).lineTo(x2, y2).stroke({ width: lineWidth, color });
 
-      for (let i = 0; i < n; i++) {
-          const mesh = createParticle(from, to, fromVector, toVector, line.flow / length * 2, i / n);
-          mesh.renderOrder = config.render_order.particles;
-          group.add(mesh);
-          state.particleMeshes.push(mesh);
-          state.particles.push(mesh.userData.state);
-      }
+    if (overview) continue;
 
-      // Toggles at both ends
-      if (mode === 'switches') {
-        for (let end of ["from", "to"]) {
-          let type = "normal"
-          if (end === "from" && from.id.includes('b') || end === "to" && to.id.includes('b')) {
-            type = "b"
-          }
-          const toggleDiv = createToggle(type = type, controls);
-          toggleDiv.addEventListener('click', () => {
-            callbacks.onToggle(line.id+"_"+end);
-          });
-          const toggle = new CSS2DObject(toggleDiv);
-          const v_from = new THREE.Vector3(from.x, from.y, 0);
-          const v_to = new THREE.Vector3(to.x, to.y, 0);
-          const v_dir = new THREE.Vector3().subVectors(v_to, v_from).normalize();
-          let v_pos;
-          if (end === "from") {
-            v_pos = v_from.clone().add(v_dir.clone().multiplyScalar(15));
-          } else {
-            v_pos = v_to.clone().add(v_dir.clone().multiplyScalar(-15));
-          }
-          toggle.position.set(v_pos.x, v_pos.y, 0);
-          state.labelsMain.add(toggle);
-        }
+    // Flow label
+    const flow = Math.abs(line.flow);
+    const flowText = flow >= 49.5 && flow <= 50.5 ? flow.toFixed(1) : flow.toFixed(0);
+    const flowLabel = makeBadge(flowText, 0xffff00, 16);
+    flowLabel.x = (from.x + to.x) / 2;
+    flowLabel.y = (from.y + to.y) / 2;
+    uiLayer.addChild(flowLabel);
+    uiElements.push(flowLabel);
+
+    // Particles
+    const effectiveLen = Math.hypot(x2 - x1, y2 - y1) || 1;
+    const nParticles = Math.max(1, Math.floor(effectiveLen / 10));
+    const speed = line.flow / effectiveLen * 2;
+
+    for (let i = 0; i < nParticles; i++) {
+      const gfx = new Graphics();
+      gfx.circle(0, 0, config.sizes.particleRadius).fill(0xffffff);
+      particleLayer.addChild(gfx);
+
+      const t0 = i / nParticles;
+      gfx.x = x1 + (x2 - x1) * t0;
+      gfx.y = y1 + (y2 - y1) * t0;
+      gfx.tint = particleColor(from.id.includes('b'), to.id.includes('b'), t0);
+
+      particles.push({
+        gfx,
+        from: { x: x1, y: y1 },
+        to: { x: x2, y: y2 },
+        from_b: from.id.includes('b'),
+        to_b: to.id.includes('b'),
+        t: t0,
+        speed,
+      });
+    }
+
+    // Switches
+    if (mode === 'switches') {
+      for (const end of ['from', 'to']) {
+        const isB = (end === 'from' ? from : to).id.includes('b');
+        const sw = makeSwitch(isB);
+
+        sw.x = end === 'from' ? from.x + nx * 15 : to.x - nx * 15;
+        sw.y = end === 'from' ? from.y + ny * 15 : to.y - ny * 15;
+
+        sw.eventMode = 'static';
+        sw.cursor = 'pointer';
+        sw.on('pointertap', () => callbacks.onToggle?.(line.id + '_' + end));
+
+        uiLayer.addChild(sw);
+        uiElements.push(sw);
       }
     }
-  });
+  }
 
-  // Nodes
-  Object.entries(data.nodes).forEach(([id, node]) => {
-    if (id.includes('b')) {
-      const nodeMesh = new THREE.Mesh(bNodeGeometry, bNodeMaterial);
-      if (overview) {
-        nodeMesh.scale.set(1.5, 1.5, 1);
-      }
-      nodeMesh.position.set(node.x, node.y, 0);
-      nodeMesh.renderOrder = config.render_order.bNodes;
-      group.add(nodeMesh);
-    } else {
-      var material = nodeProdMaterial
-      if (node.injection < 0) {
-        var material = nodeConsMaterial;
-      }
-      const nodeMesh = new THREE.Mesh(nodeGeometry, material);
-      if (overview) {
-        nodeMesh.scale.set(1.5, 1.5, 1);
-      }
-      nodeMesh.position.set(node.x, node.y, 0);
-      nodeMesh.userData = { id: node.id };
-      nodeMesh.renderOrder = config.render_order.nodes;
-      group.add(nodeMesh);
+  // ── b-node rings (main view only) ─────────────────────────────
+  for (const [id, node] of Object.entries(network.nodes)) {
+    if (!id.includes('b') || overview) continue;
+    const bCont = makeBNodeContainer(node.x, node.y);
+    bNodeLayer.addChild(bCont);
+    bNodeContainers[id] = bCont;
+  }
 
-      if (!overview) {
-        // Node injection label using CSS2DObject
-        const divMain = document.createElement('div');
-        divMain.className = 'label';
-        divMain.textContent = node.injection.toFixed(0);
-        divMain.style.color = 'white';
-        const label = new CSS2DObject(divMain);
-        label.position.set(node.x, node.y, 0);
-        state.labelsMain.add(label);
+  // ── Regular nodes ──────────────────────────────────────────────
+  for (const [id, node] of Object.entries(network.nodes)) {
+    if (id.includes('b')) continue;
 
-        if (mode === 'redispatch') {
-          // show increase/decrease arrows
-          for (let direction of ["up", "down"]) {
-            const arrowDiv = createArrow(direction , controls);
-            arrowDiv.addEventListener('click', () => {
-              callbacks.changeInjection(node.id, direction);
-            });
-            const toggle = new CSS2DObject(arrowDiv);
-            let yOffset = direction === "up" ? 12 : -12;
-            toggle.position.set(node.x, node.y + yOffset, 0);
-            state.labelsMain.add(toggle);
-            
-            //prices
-            const divPrice = document.createElement('div');
-            divPrice.className = 'label-small';
-            divPrice.textContent = direction === "up" ? node.cost_increase + '€' : node.cost_decrease + '€';
-            divPrice.style.color = 'white';
-            const priceLabel = new CSS2DObject(divPrice);
-            let priceYOffset = direction === "up" ? 12 : -12;
-            priceLabel.position.set(node.x + 12, node.y + priceYOffset, 0);
-            state.labelsMain.add(priceLabel);
-          }
-          // adjustment
-          if (node.id in data.redispatch.adjustments && data.redispatch.adjustments[node.id] !== 0) {
-            const divAdj = document.createElement('div');
-            divAdj.className = 'label';
-            let adj = data.redispatch.adjustments[node.id];
-            divAdj.textContent = `(${(adj > 0 ? '+' : '') + adj.toFixed(0)})`;
-            divAdj.style.color = 'white';
-            const adjLabel = new CSS2DObject(divAdj);
-            adjLabel.position.set(node.x + 15, node.y, 0);
-            state.labelsMain.add(adjLabel);
-          }
-        }
+    const color = node.injection >= 0 ? config.colors.nodeProd : config.colors.nodeCons;
+    const gfx = new Graphics();
+    gfx.circle(0, 0, config.sizes.nodeRadius).fill(color);
+    gfx.x = node.x;
+    gfx.y = node.y;
+    mainNodeGraphics[id] = gfx;
+    if (!overview && network.nodes[id + 'b']) gfx.scale.set(SPLIT_SCALE);
+
+    if (!overview) {
+      gfx.eventMode = 'static';
+      gfx.cursor = 'pointer';
+      gfx.on('pointertap', () => {
+        if (mode === 'switches') callbacks.onNodeClick?.(node.id);
+        else if (mode === 'redispatch') callbacks.onResetRedispatch?.(node.id);
+      });
+    }
+    nodeLayer.addChild(gfx);
+
+    if (overview) continue;
+
+    // Injection label
+    const injLabel = makeLabel(node.injection.toFixed(0), 'white', 16);
+    injLabel.x = node.x;
+    injLabel.y = node.y;
+    uiLayer.addChild(injLabel);
+    uiElements.push(injLabel);
+
+    // Redispatch mode: pill buttons + adjustment badge
+    if (mode === 'redispatch') {
+      for (const dir of ['up', 'down']) {
+        const price = dir === 'up' ? node.cost_increase : node.cost_decrease;
+        const btn = makeRedispatchBtn(dir, price);
+        btn.x = node.x;
+        btn.y = node.y + (dir === 'up' ? -15 : 15);
+        btn.eventMode = 'static';
+        btn.cursor = 'pointer';
+        btn.on('pointertap', () => callbacks.changeInjection?.(node.id, dir));
+        uiLayer.addChild(btn);
+        uiElements.push(btn);
+      }
+
+      const adj = network.redispatch?.adjustments?.[id];
+      if (adj && adj !== 0) {
+        const adjLabel = makeBadge((adj > 0 ? '+' : '') + adj.toFixed(0), config.colors.redispatch, 14);
+        adjLabel.x = node.x + 12;
+        adjLabel.y = node.y;
+        uiLayer.addChild(adjLabel);
+        uiElements.push(adjLabel);
       }
     }
-  });
-  return group;
+  }
+
+  return { container, particles, uiElements, overloadedGfx, bNodeContainers, mainNodeGraphics };
 }
 
 
-// ---------- helpers ----------
+// ── Drawing helpers ───────────────────────────────────────────────
 
-const particleGeometry = (() => {
-  const shape = new THREE.Shape();
-  shape.absarc(0, 0, config.sizes.particleRadius);
-  return new THREE.ShapeGeometry(shape, 16);
-})();
-
-function createParticle(from, to, fromVector, toVector, speed, t0) {
-  const material = new THREE.MeshBasicMaterial({
-    color: 0xffff00,
-    side: THREE.DoubleSide,
-    depthWrite: false
+function makeLabel(text, fill, fontSize) {
+  const t = new Text({
+    text,
+    style: {
+      fill,
+      fontSize,
+      fontWeight: 'bold',
+      fontFamily: 'sans-serif',
+      dropShadow: { color: '#000000', blur: 6, distance: 0, alpha: 1 },
+    },
   });
-
-  const mesh = new THREE.Mesh(particleGeometry, material);
-
-  mesh.userData.state = {
-    from: fromVector,
-    to: toVector,
-    from_b: from.id.includes('b'),
-    to_b: to.id.includes('b'),
-    t: t0,
-    speed: speed
-  };
-
-  return mesh;
+  t.anchor.set(0.5);
+  return t;
 }
 
-const nodeGeometry = (() => {
-  const shape = new THREE.Shape();
-  shape.absarc(0, 0, config.sizes.nodeRadius);
-  return new THREE.ShapeGeometry(shape, 32);
-})();
-const nodeProdMaterial = new THREE.MeshBasicMaterial({ 
-  color: config.colors.nodeProd, 
-  side: THREE.DoubleSide, 
-  depthWrite: false 
-});
-const nodeConsMaterial = new THREE.MeshBasicMaterial({ 
-  color: config.colors.nodeCons, 
-  side: THREE.DoubleSide, 
-  depthWrite: false 
-});
-const bNodeGeometry = (() => {
-  const shape = new THREE.Shape();
-  shape.absarc(0, 0, config.sizes.ringRadiusOuter);
-  const holePath = new THREE.Path();
-  holePath.absarc(0, 0, config.sizes.ringRadiusInner);
-  shape.holes.push(holePath);
-  return new THREE.ShapeGeometry(shape, 32);
-})();
-const bNodeMaterial = new THREE.MeshBasicMaterial({
-  color: config.colors.bNode,
-  side: THREE.DoubleSide,
-  depthWrite: false
-});
+function makeBadge(text, fill, fontSize) {
+  const t = new Text({ text, style: { fill, fontSize, fontWeight: 'bold', fontFamily: 'sans-serif' } });
+  t.anchor.set(0.5);
+  // t.width is computed from the canvas texture — use it if available, otherwise estimate
+  const tw = t.width > 0 ? t.width : text.length * fontSize * 0.65;
+  const th = t.height > 0 ? t.height : fontSize * 1.4;
+  const px = 5, py = 2;
+  const bg = new Graphics();
+  bg.roundRect(-tw / 2 - px, -th / 2 - py, tw + px * 2, th + py * 2, 4)
+    .fill({ color: 0x111111, alpha: 0.80 });
+  const c = new Container();
+  c.addChild(bg, t);
+  return c;
+}
+
+function makeSwitch(isB) {
+  const g = new Graphics();
+  const r = config.sizes.switchRadius;
+  if (isB) {
+    g.circle(0, 0, r).fill({ color: 0xc8c8c8, alpha: 0.2 });
+    g.circle(0, 0, r + 4).stroke({ width: 3, color: 0xc8c8c8, alpha: 0.9 });
+  } else {
+    g.circle(0, 0, r).fill({ color: 0xc8c8c8, alpha: 0.9 });
+    g.circle(0, 0, r + 4).stroke({ width: 3, color: 0xc8c8c8, alpha: 0.2 });
+  }
+  // Hit area is 2× the visual radius so switches are easy to tap
+  g.hitArea = new Circle(0, 0, r * 2);
+  return g;
+}
+
+function makeRedispatchBtn(dir, price) {
+  const c = new Container();
+  const w = 58, h = 26, r = 14;
+  const col = config.colors.redispatch;
+
+  const bg = new Graphics();
+  bg.roundRect(-w / 2, -h / 2, w, h, r)
+    .fill({ color: col, alpha: 0.70 })
+    .stroke({ width: 1.5, color: col });
+
+  // Direction triangle drawn in accent colour
+  const tri = new Graphics();
+  if (dir === 'up') {
+    tri.poly([-6, 3, 6, 3, 0, -5]).fill(col);
+  } else {
+    tri.poly([-6, -3, 6, -3, 0, 5]).fill(col);
+  }
+  tri.x = -14;
+
+  const label = new Text({
+    text: price + '€',
+    style: {
+      fill: '#ffffff',
+      fontSize: 14,
+      fontWeight: 'bold',
+      fontFamily: 'sans-serif',
+      dropShadow: { color: '#000000', blur: 4, distance: 0, alpha: 0.6 },
+    },
+  });
+  label.anchor.set(0, 0.5);
+  label.x = -4;
+
+  c.addChild(bg, tri, label);
+  c.hitArea = new Rectangle(-w / 2, -h / 2, w, h);
+  return c;
+}
+
+// ── B-node ring factory (used by createNetwork + phantom animations) ─
+export function makeBNodeContainer(x, y) {
+  const ringW = config.sizes.ringRadiusOuter - config.sizes.ringRadiusInner;
+  const ringMid = (config.sizes.ringRadiusOuter + config.sizes.ringRadiusInner) / 2;
+  const g = new Graphics();
+  g.circle(0, 0, ringMid).stroke({ width: ringW, color: config.colors.bNode });
+  const c = new Container();
+  c.x = x;
+  c.y = y;
+  c.addChild(g);
+  return c;
+}
+
+// ── Particle colour (matches original Three.js HSL animation) ────
+
+export function particleColor(from_b, to_b, t) {
+  if (from_b && to_b) return hsl(0.14, 1, 1.0);
+  if (to_b) return hsl(0.14, 1, 0.5 + 0.5 * t);
+  if (from_b) return hsl(0.14, 1, 1.0 - 0.5 * t);
+  return hsl(0.14, 1, 0.5);
+}
+
+function hsl(h, s, l) {
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs(((h * 6) % 2) - 1));
+  const m = l - c / 2;
+  let r, g, b;
+  if (h < 1 / 6) { r = c; g = x; b = 0; }
+  else if (h < 2 / 6) { r = x; g = c; b = 0; }
+  else if (h < 3 / 6) { r = 0; g = c; b = x; }
+  else if (h < 4 / 6) { r = 0; g = x; b = c; }
+  else if (h < 5 / 6) { r = x; g = 0; b = c; }
+  else { r = c; g = 0; b = x; }
+  return (Math.round((r + m) * 255) << 16)
+    | (Math.round((g + m) * 255) << 8)
+    | Math.round((b + m) * 255);
+}
