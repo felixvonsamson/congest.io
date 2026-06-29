@@ -137,6 +137,10 @@ export function createNetwork(mode, network, callbacks = {}, overview = false) {
     const bCont = makeBNodeContainer(node.x, node.y);
     bNodeLayer.addChild(bCont);
     bNodeContainers[id] = bCont;
+
+    // Particles that travel around the ring between connection points,
+    // each arc at a speed matching the bus current flowing through it.
+    addRingParticles(network, id, node.x, node.y, particleLayer, particles);
   }
 
   // ── Regular nodes ──────────────────────────────────────────────
@@ -196,6 +200,97 @@ export function createNetwork(mode, network, callbacks = {}, overview = false) {
   }
 
   return { container, particles, uiElements, overloadedGfx, bNodeContainers, mainNodeGraphics };
+}
+
+
+// ── B-node ring flow ──────────────────────────────────────────────
+//
+// A b-node (bus-split) is a single electrical node, but it is drawn as a ring
+// so the player can see the "bus bar" that bypassing lines tap into. The lines
+// connect at points around the ring; the current each line carries must travel
+// around the ring to reach the others. Different ring arcs therefore carry
+// different currents, and we animate particles on each arc at the matching speed.
+//
+// We treat the ring as an ideal bus bar (a zero-impedance conductor with
+// resistance proportional to arc length). Let the connection points, sorted by
+// angle, inject currents c_0…c_{k-1} into the ring (Σ c_i = 0 since the b-node
+// has zero injection). The current on arc i (point i → point i+1) is
+//   f_i = f_0 + S_i,   S_i = c_1 + … + c_i   (KCL around the ring),
+// where f_0 is the free circulating current. We fix it by minimising the bus-bar
+// dissipation Σ L_i f_i²  ⇒  f_0 = −Σ L_i S_i / Σ L_i  (L_i = arc length).
+//
+// For the common two-line bypass this splits the current evenly both ways round
+// the ring — exactly the intuitive behaviour the tutorial asks the player to see.
+function addRingParticles(network, nodeId, cx, cy, particleLayer, particles) {
+  const radius = (config.sizes.ringRadiusOuter + config.sizes.ringRadiusInner) / 2;
+
+  // Connection points: angle on the ring + current injected INTO the ring.
+  const conns = [];
+  for (const line of Object.values(network.lines)) {
+    let other, current;
+    if (line.to_node === nodeId) {
+      other = network.nodes[line.from_node];
+      current = line.flow;        // positive flow enters the b-node
+    } else if (line.from_node === nodeId) {
+      other = network.nodes[line.to_node];
+      current = -line.flow;       // positive flow leaves the b-node
+    } else {
+      continue;
+    }
+    if (!other) continue;
+    conns.push({ angle: Math.atan2(other.y - cy, other.x - cx), current });
+  }
+  if (conns.length < 2) return;
+
+  conns.sort((a, b) => a.angle - b.angle);
+  const k = conns.length;
+
+  // Angular span of each arc (point i → point i+1, wrapping).
+  const span = [];
+  for (let i = 0; i < k; i++) {
+    let d = conns[(i + 1) % k].angle - conns[i].angle;
+    if (d <= 0) d += Math.PI * 2;
+    span.push(d);
+  }
+
+  // Partial sums S_i and the dissipation-minimising circulating current f_0.
+  const S = [0];
+  for (let i = 1; i < k; i++) S.push(S[i - 1] + conns[i].current);
+  let num = 0, den = 0;
+  for (let i = 0; i < k; i++) { num += span[i] * S[i]; den += span[i]; }
+  const f0 = den > 0 ? -num / den : 0;
+
+  // Emit particles per arc, signed flow → direction & speed.
+  for (let i = 0; i < k; i++) {
+    const flow = f0 + S[i];
+    const arcLen = radius * span[i];
+    if (Math.abs(flow) < 0.05 || arcLen < 0.5) continue;  // no visible current
+
+    const a0 = conns[i].angle;
+    const arcSpan = span[i];
+    const nParticles = Math.max(1, Math.floor(arcLen / 8));
+    // Same flow→speed mapping as line particles: linear speed = flow * 0.02 px/frame.
+    const speed = flow / arcLen * 2;
+    const dotColor = config.colors.flowDot;
+
+    for (let j = 0; j < nParticles; j++) {
+      const gfx = new Graphics();
+      gfx.circle(0, 0, config.sizes.particleRadius).fill(0xffffff);
+      gfx.tint = dotColor;
+      particleLayer.addChild(gfx);
+
+      const t0 = j / nParticles;
+      const ang = a0 + arcSpan * t0;
+      gfx.x = cx + radius * Math.cos(ang);
+      gfx.y = cy + radius * Math.sin(ang);
+
+      particles.push({
+        gfx, arc: true,
+        cx, cy, radius, a0, span: arcSpan,
+        t: t0, speed, color: dotColor,
+      });
+    }
+  }
 }
 
 

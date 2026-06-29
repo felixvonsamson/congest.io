@@ -1,93 +1,96 @@
+// ── Guest progress (localStorage) ──────────────────────────────────
+
+function getGuestProgress() {
+  try {
+    const raw = localStorage.getItem('guest_progress');
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function setGuestProgress(progress) {
+  localStorage.setItem('guest_progress', JSON.stringify(progress));
+}
+
+export function clearGuestProgress() {
+  localStorage.removeItem('guest_progress');
+}
+
+export function isGuest() {
+  return !sessionStorage.getItem('access_token') && !!getGuestProgress();
+}
+
+// ── Auth helpers ────────────────────────────────────────────────────
+
 function getToken() {
-  return sessionStorage.getItem("access_token");
+  return sessionStorage.getItem('access_token');
 }
 
 export function authHeaders() {
   return {
-    "Content-Type": "application/json",
-    "Authorization": `Bearer ${getToken()}`
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${getToken()}`,
   };
 }
 
+// ── Main auth check ─────────────────────────────────────────────────
+
 export async function ensureLoggedIn() {
-  const token = sessionStorage.getItem("access_token");
+  const token = getToken();
+
   if (!token) {
-    showAuth();
+    const guestProgress = getGuestProgress();
+    if (guestProgress) {
+      const guestPlayer = {
+        username: 'Guest',
+        current_level: guestProgress.current_level ?? 1,
+        unlocked_levels: guestProgress.unlocked_levels ?? 1,
+        money: guestProgress.money ?? 100,
+        is_guest: true,
+      };
+      sessionStorage.setItem('player', JSON.stringify(guestPlayer));
+      updateHUD(guestPlayer, true);
+      return true;
+    }
+    window.location.href = '/login.html';
     return false;
   }
 
-  const res = await fetch("/api/me", {
-    headers: authHeaders()
-  });
-
+  const res = await fetch('/api/me', { headers: authHeaders() });
   if (!res.ok) {
-    showAuth();
+    sessionStorage.removeItem('access_token');
+    window.location.href = '/login.html';
     return false;
   }
 
   const player = await res.json();
-  sessionStorage.setItem("player", JSON.stringify(player));
-  document.getElementById("moneyAmount").textContent = `${player.money}€`;
-  const auth_button = document.getElementById("authButton");
-  auth_button.textContent = "Logout";
-  auth_button.onclick = logout;
+  sessionStorage.setItem('player', JSON.stringify(player));
+  updateHUD(player, false);
   return true;
 }
 
+function updateHUD(player, guest) {
+  const moneyEl = document.getElementById('moneyAmount');
+  if (moneyEl) moneyEl.textContent = `${player.money}€`;
+
+  const guestBtn = document.getElementById('guestSignInBtn');
+  const authBtn = document.getElementById('authButton');
+  const authLabel = authBtn?.querySelector('span');
+
+  if (guest) {
+    if (guestBtn) guestBtn.style.display = 'flex';
+    if (authLabel) authLabel.textContent = 'Sign In';
+    if (authBtn) authBtn.onclick = () => { window.location.href = '/login.html'; };
+  } else {
+    if (guestBtn) guestBtn.style.display = 'none';
+    if (authLabel) authLabel.textContent = 'Logout';
+    if (authBtn) authBtn.onclick = logout;
+  }
+}
+
 function logout() {
-  sessionStorage.removeItem("access_token");
-  sessionStorage.removeItem("player");
-  location.reload();
-}
-
-export async function handleAuth(endpoint) {
-  let username, password, confirm;
-  const errorEl = document.getElementById("authError");
-  if (endpoint === "register") {
-    password = document.getElementById("signupPassword").value;
-    confirm = document.getElementById("signupConfirmPassword").value;
-    if (password !== confirm) {
-      errorEl.textContent = "Passwords do not match";
-      return;
-    }
-    username = document.getElementById("signupUsername").value;
-  }else {
-    username = document.getElementById("loginUsername").value;
-    password = document.getElementById("loginPassword").value;
-  }
-
-  errorEl.textContent = "";
-
-  try {
-    const res = await fetch(`/api/${endpoint}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password })
-    });
-
-    if (!res.ok) {
-      errorEl.textContent = "Invalid credentials";
-      return;
-    }
-
-    const data = await res.json();
-    sessionStorage.setItem("access_token", data.access_token);
-    sessionStorage.setItem("player", JSON.stringify(data.player));
-
-    hideAuth();
-    location.reload(); // simplest + safest
-  } catch (e) {
-    errorEl.textContent = "Server error: " + e.message;
-  }
-}
-
-document.getElementById("loginBtn").onclick = () => handleAuth("login");
-document.getElementById("signupBtn").onclick = () => handleAuth("register");
-
-function showAuth() {
-  document.getElementById("authPanel").style.display = "flex";
-}
-
-function hideAuth() {
-  document.getElementById("authPanel").style.display = "none";
+  sessionStorage.removeItem('access_token');
+  sessionStorage.removeItem('player');
+  window.location.href = '/login.html';
 }

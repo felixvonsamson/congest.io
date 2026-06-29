@@ -1,5 +1,41 @@
 import { createNetwork, makeBNodeContainer, SPLIT_SCALE } from './createNetwork.js';
-import { authHeaders } from '../auth/auth.js';
+import { authHeaders, setGuestProgress } from '../auth/auth.js';
+
+// ── Solved UI helpers ───────────────────────────────────────────────
+
+function hideSolvedUI() {
+  const overlay = document.getElementById('solvedOverlay');
+  overlay.style.display = 'none';
+  overlay.style.opacity = '';
+  hideSolvedPill();
+}
+
+function hideSolvedPill() {
+  const pill = document.getElementById('solvedPill');
+  pill.classList.remove('entering');
+  pill.style.display = 'none';
+}
+
+function triggerSolvedUI(rewardText) {
+  document.getElementById('rewardMessage').textContent = rewardText;
+
+  if (window._solvedExploring) {
+    const pill = document.getElementById('solvedPill');
+    if (pill.style.display === 'none' || !pill.style.display) {
+      pill.style.display = 'flex';
+      pill.classList.remove('entering');
+      void pill.offsetWidth;
+      pill.classList.add('entering');
+    }
+    return;
+  }
+
+  const overlay = document.getElementById('solvedOverlay');
+  overlay.style.opacity = '0';
+  overlay.style.display = 'block';
+  void overlay.offsetWidth; // force reflow so the transition sees the opacity change
+  overlay.style.opacity = '1';
+}
 
 /**
  * Rebuild the PixiJS scene from new network data.
@@ -158,15 +194,19 @@ export function updateNetwork(ctx, network, callbacks) {
 
   // ── Solved check ───────────────────────────────────────────────
   if (network.cost !== 0 || settings.mode === 'redispatch') {
-    document.getElementById('solvedOverlay').style.display = 'none';
+    hideSolvedUI();
     return;
   }
-  checkSolution(network);
+  const player = JSON.parse(sessionStorage.getItem('player'));
+  if (player?.is_guest) {
+    checkSolutionGuest(network, player);
+  } else {
+    checkSolution(network);
+  }
 }
 
 
 function checkSolution(network) {
-  const solvedOverlay = document.getElementById('solvedOverlay');
   fetch('/api/check_solution', {
     method: 'POST',
     headers: authHeaders(),
@@ -175,15 +215,48 @@ function checkSolution(network) {
     .then(r => r.json())
     .then(data => {
       if (!data.solved) {
-        solvedOverlay.style.display = 'none';
+        hideSolvedUI();
         return;
       }
       const player = data.player;
       document.getElementById('moneyAmount').textContent = player.money + '€';
       sessionStorage.setItem('player', JSON.stringify(player));
-      solvedOverlay.style.display = 'block';
-      document.getElementById('rewardMessage').textContent = `Reward: ${data.reward}€`;
+      triggerSolvedUI(`Reward: ${data.reward}€`);
     });
+}
+
+function checkSolutionGuest(network, player) {
+  const allLinesOk = Object.values(network.lines).every(
+    line => Math.abs(line.flow) <= line.limit,
+  );
+  if (!allLinesOk) {
+    hideSolvedUI();
+    return;
+  }
+
+  let redispatchCost = 0;
+  for (const [nodeId, adj] of Object.entries(network.redispatch?.adjustments ?? {})) {
+    const node = network.nodes[nodeId];
+    if (!node) continue;
+    redispatchCost += adj > 0 ? adj * node.cost_increase : -adj * node.cost_decrease;
+  }
+
+  let reward = 0;
+  if (player.current_level >= player.unlocked_levels) {
+    player.unlocked_levels += 1;
+    reward = 50;
+  }
+  player.money = (player.money ?? 100) + reward - Math.round(redispatchCost);
+
+  sessionStorage.setItem('player', JSON.stringify(player));
+  setGuestProgress({
+    current_level: player.current_level,
+    unlocked_levels: player.unlocked_levels,
+    money: player.money,
+  });
+
+  document.getElementById('moneyAmount').textContent = player.money + '€';
+  triggerSolvedUI(reward > 0 ? `Reward: ${reward}€` : '');
 }
 
 

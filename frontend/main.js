@@ -150,8 +150,15 @@ async function loadGuestLevel(levelNum) {
       p.t += p.speed * 0.01;
       if (p.t > 1) p.t -= 1;
       if (p.t < 0) p.t += 1;
-      p.gfx.x    = p.from.x + (p.to.x - p.from.x) * p.t;
-      p.gfx.y    = p.from.y + (p.to.y - p.from.y) * p.t;
+      if (p.arc) {
+        // Around a b-node ring: position is an angle along the arc.
+        const ang = p.a0 + p.span * p.t;
+        p.gfx.x = p.cx + p.radius * Math.cos(ang);
+        p.gfx.y = p.cy + p.radius * Math.sin(ang);
+      } else {
+        p.gfx.x = p.from.x + (p.to.x - p.from.x) * p.t;
+        p.gfx.y = p.from.y + (p.to.y - p.from.y) * p.t;
+      }
       p.gfx.tint = p.color;
     }
 

@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>congest.io — Sign In</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .grid-bg {
+      background-image:
+        linear-gradient(rgba(59,130,246,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(59,130,246,0.04) 1px, transparent 1px);
+      background-size: 48px 48px;
+    }
+    input:-webkit-autofill {
+      -webkit-box-shadow: 0 0 0 30px #1f2937 inset !important;
+      -webkit-text-fill-color: #fff !important;
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-gray-950 grid-bg flex items-center justify-center p-4">
+
+  <div class="w-full max-w-sm">
+    <!-- Logo -->
+    <div class="text-center mb-8">
+      <h1 class="text-4xl font-bold text-white tracking-tight">
+        congest<span class="text-blue-500">.</span>io
+      </h1>
+      <p class="text-gray-500 mt-2 text-sm">Power grid puzzle game</p>
+    </div>
+
+    <!-- Card -->
+    <div class="bg-gray-900 border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
+      <!-- Tabs -->
+      <div class="flex border-b border-white/10">
+        <button id="tabLogin"
+          class="flex-1 py-3.5 text-sm font-semibold text-white border-b-2 border-blue-500 transition-all">
+          Sign In
+        </button>
+        <button id="tabSignup"
+          class="flex-1 py-3.5 text-sm font-medium text-gray-500 border-b-2 border-transparent hover:text-gray-300 transition-all">
+          Sign Up
+        </button>
+      </div>
+
+      <div class="p-6">
+        <!-- Login form -->
+        <div id="loginForm">
+          <div class="space-y-3">
+            <div>
+              <label class="block text-xs font-medium text-gray-400 mb-1.5">Username</label>
+              <input type="text" id="loginUsername" placeholder="Enter your username" autocomplete="username"
+                class="w-full bg-gray-800 border border-gray-700 focus:border-blue-500 focus:ring-1 focus:ring-blue-500
+                       text-white rounded-lg px-3.5 py-2.5 text-sm outline-none transition-colors placeholder-gray-600">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-400 mb-1.5">Password</label>
+              <input type="password" id="loginPassword" placeholder="Enter your password" autocomplete="current-password"
+                class="w-full bg-gray-800 border border-gray-700 focus:border-blue-500 focus:ring-1 focus:ring-blue-500
+                       text-white rounded-lg px-3.5 py-2.5 text-sm outline-none transition-colors placeholder-gray-600">
+            </div>
+          </div>
+          <button id="loginBtn"
+            class="w-full mt-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 active:bg-blue-700
+                   text-white text-sm font-semibold transition-colors shadow-lg shadow-blue-900/30">
+            Sign In
+          </button>
+        </div>
+
+        <!-- Sign up form -->
+        <div id="signupForm" class="hidden">
+          <div class="space-y-3">
+            <div>
+              <label class="block text-xs font-medium text-gray-400 mb-1.5">Username</label>
+              <input type="text" id="signupUsername" placeholder="Choose a username" autocomplete="username"
+                class="w-full bg-gray-800 border border-gray-700 focus:border-blue-500 focus:ring-1 focus:ring-blue-500
+                       text-white rounded-lg px-3.5 py-2.5 text-sm outline-none transition-colors placeholder-gray-600">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-400 mb-1.5">Password</label>
+              <input type="password" id="signupPassword" placeholder="Create a password" autocomplete="new-password"
+                class="w-full bg-gray-800 border border-gray-700 focus:border-blue-500 focus:ring-1 focus:ring-blue-500
+                       text-white rounded-lg px-3.5 py-2.5 text-sm outline-none transition-colors placeholder-gray-600">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-400 mb-1.5">Confirm Password</label>
+              <input type="password" id="signupConfirmPassword" placeholder="Repeat your password" autocomplete="new-password"
+                class="w-full bg-gray-800 border border-gray-700 focus:border-blue-500 focus:ring-1 focus:ring-blue-500
+                       text-white rounded-lg px-3.5 py-2.5 text-sm outline-none transition-colors placeholder-gray-600">
+            </div>
+          </div>
+          <button id="signupBtn"
+            class="w-full mt-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 active:bg-blue-700
+                   text-white text-sm font-semibold transition-colors shadow-lg shadow-blue-900/30">
+            Create Account
+          </button>
+        </div>
+
+        <!-- Error message -->
+        <p id="authError" class="text-red-400 text-xs mt-3 text-center hidden"></p>
+
+        <!-- Guest option -->
+        <div class="mt-5 pt-4 border-t border-white/[0.06]">
+          <!-- Guest warning (shown after clicking the button) -->
+          <div id="guestWarning" class="hidden mb-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 space-y-2">
+            <p class="font-medium">Progress stored in this browser only</p>
+            <p class="text-amber-400/80">If you clear your browser data or switch devices, your progress will be lost. Create a free account to save permanently.</p>
+            <div class="flex gap-2 pt-1">
+              <button id="confirmGuestBtn"
+                class="flex-1 py-2 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-medium transition-colors text-xs">
+                Play anyway
+              </button>
+              <button id="cancelGuestBtn"
+                class="flex-1 py-2 rounded-lg bg-gray-700/50 hover:bg-gray-700 text-gray-400 font-medium transition-colors text-xs">
+                Create account
+              </button>
+            </div>
+          </div>
+
+          <button id="guestBtn"
+            class="w-full py-2 rounded-xl border border-white/[0.08]
+                   text-gray-500 hover:text-gray-300 text-xs font-medium
+                   hover:bg-white/5 transition-colors">
+            Try game without an account
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <p class="text-center text-gray-700 text-xs mt-6">
+      congest.io — manage congestion in power grids
+    </p>
+  </div>
+
+  <script>
+    // ── Tab switching ───────────────────────────────────────────────
+    const tabLogin = document.getElementById('tabLogin');
+    const tabSignup = document.getElementById('tabSignup');
+    const loginForm = document.getElementById('loginForm');
+    const signupForm = document.getElementById('signupForm');
+
+    function showTab(tab) {
+      const isLogin = tab === 'login';
+      loginForm.classList.toggle('hidden', !isLogin);
+      signupForm.classList.toggle('hidden', isLogin);
+      tabLogin.classList.toggle('text-white', isLogin);
+      tabLogin.classList.toggle('border-blue-500', isLogin);
+      tabLogin.classList.toggle('text-gray-500', !isLogin);
+      tabLogin.classList.toggle('border-transparent', !isLogin);
+      tabSignup.classList.toggle('text-white', !isLogin);
+      tabSignup.classList.toggle('border-blue-500', !isLogin);
+      tabSignup.classList.toggle('text-gray-500', isLogin);
+      tabSignup.classList.toggle('border-transparent', isLogin);
+      document.getElementById('authError').classList.add('hidden');
+    }
+
+    tabLogin.addEventListener('click', () => showTab('login'));
+    tabSignup.addEventListener('click', () => showTab('signup'));
+
+    // ── Auth ────────────────────────────────────────────────────────
+    async function handleAuth(endpoint) {
+      const errorEl = document.getElementById('authError');
+      let username, password;
+
+      if (endpoint === 'register') {
+        const pw = document.getElementById('signupPassword').value;
+        const confirm = document.getElementById('signupConfirmPassword').value;
+        if (pw !== confirm) {
+          errorEl.textContent = 'Passwords do not match';
+          errorEl.classList.remove('hidden');
+          return;
+        }
+        username = document.getElementById('signupUsername').value;
+        password = pw;
+      } else {
+        username = document.getElementById('loginUsername').value;
+        password = document.getElementById('loginPassword').value;
+      }
+
+      if (!username || !password) {
+        errorEl.textContent = 'Please fill in all fields';
+        errorEl.classList.remove('hidden');
+        return;
+      }
+
+      errorEl.classList.add('hidden');
+
+      try {
+        const res = await fetch(`/api/${endpoint}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password }),
+        });
+
+        if (!res.ok) {
+          errorEl.textContent = endpoint === 'register'
+            ? 'Username already taken'
+            : 'Invalid username or password';
+          errorEl.classList.remove('hidden');
+          return;
+        }
+
+        const data = await res.json();
+        sessionStorage.setItem('access_token', data.access_token);
+
+        // ── Migrate guest progress if ahead of account ──────────
+        const guestRaw = localStorage.getItem('guest_progress');
+        if (guestRaw) {
+          try {
+            const guest = JSON.parse(guestRaw);
+            if (guest.unlocked_levels > data.player.unlocked_levels) {
+              await fetch('/api/save_progress', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${data.access_token}`,
+                },
+                body: JSON.stringify({
+                  username: data.player.username,
+                  current_level: guest.current_level,
+                  unlocked_levels: guest.unlocked_levels,
+                }),
+              });
+              data.player.current_level = guest.current_level;
+              data.player.unlocked_levels = guest.unlocked_levels;
+            }
+          } catch (_) { /* non-fatal */ }
+          localStorage.removeItem('guest_progress');
+        }
+
+        sessionStorage.setItem('player', JSON.stringify(data.player));
+        window.location.href = '/';
+      } catch (e) {
+        errorEl.textContent = 'Connection error — is the server running?';
+        errorEl.classList.remove('hidden');
+      }
+    }
+
+    document.getElementById('loginBtn').addEventListener('click', () => handleAuth('login'));
+    document.getElementById('signupBtn').addEventListener('click', () => handleAuth('register'));
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      if (!loginForm.classList.contains('hidden')) handleAuth('login');
+      else handleAuth('register');
+    });
+
+    // ── Guest mode ──────────────────────────────────────────────────
+    const guestWarning = document.getElementById('guestWarning');
+
+    document.getElementById('guestBtn').addEventListener('click', () => {
+      guestWarning.classList.toggle('hidden');
+    });
+
+    document.getElementById('cancelGuestBtn').addEventListener('click', () => {
+      guestWarning.classList.add('hidden');
+      showTab('signup');
+    });
+
+    document.getElementById('confirmGuestBtn').addEventListener('click', () => {
+      const existing = localStorage.getItem('guest_progress');
+      if (!existing) {
+        localStorage.setItem('guest_progress', JSON.stringify({
+          current_level: 1,
+          unlocked_levels: 1,
+          money: 100,
+        }));
+      }
+      window.location.href = '/';
+    });
+
+    // If already has guest progress, skip the login page entirely
+    if (!sessionStorage.getItem('access_token') && localStorage.getItem('guest_progress')) {
+      // They have guest progress but are on the login page — let them stay
+      // (they may want to sign in to save their progress)
+    }
+  </script>
+</body>
+</html>

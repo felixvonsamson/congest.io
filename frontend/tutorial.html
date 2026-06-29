@@ -1,22 +1,11 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>congest.io — Tutorial</title>
+  <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="./styling.css">
-  <style>
-    #topLeftUI {
-      position: fixed;
-      top: 12px;
-      left: 12px;
-      z-index: 1000;
-    }
-    #tutorialHelp {
-      display: block;
-    }
-  </style>
 </head>
 
 <body>
@@ -24,11 +13,31 @@
 
   <div id="app"></div>
 
-  <div id="topLeftUI">
-    <button id="skipTutorial" class="button blue">← Back to game</button>
+  <!-- Back button -->
+  <div class="fixed top-3 left-3 z-[1000]">
+    <button id="skipTutorial"
+            class="flex items-center gap-2 px-3.5 py-2 rounded-xl
+                   bg-gray-900/90 backdrop-blur-md border border-white/[0.08]
+                   text-white text-sm font-semibold
+                   hover:bg-white/10 active:bg-white/20 transition-colors
+                   shadow-lg shadow-black/50">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18"/>
+      </svg>
+      Back to game
+    </button>
   </div>
 
-  <div id="tutorialHelp" class="ui-element"></div>
+  <!-- Tutorial hint (bottom center) -->
+  <div id="tutorialHelp" style="display:block;"
+       class="fixed bottom-0 left-1/2 -translate-x-1/2 z-[1000]
+              px-6 py-4 rounded-t-2xl
+              bg-gray-900/95 backdrop-blur-md
+              border-x border-t border-white/[0.08]
+              text-white text-sm
+              w-[min(820px,82vw)] text-center
+              shadow-xl shadow-black/50">
+  </div>
 
   <script>
     document.getElementById('skipTutorial').addEventListener('click', () => {
@@ -36,5 +45,4 @@
     });
   </script>
 </body>
-
 </html>
