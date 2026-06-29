@@ -30,6 +30,7 @@ export function createNetwork(mode, network, callbacks = {}, overview = false) {
   // the actual coloured stroke. The dark border at ring-crossing points makes
   // it visually clear the line floats above the ring and is not connected to it.
   const bNodeLayer = new Container(); // individual b-node rings (animated)
+  const ringParticleLayer = new Container(); // ring arc particles — below lines so shadows mask them
   const lineShadowGfx = new Graphics();  // bg-coloured outline under all lines
   const normalLinesGfx = new Graphics();
   const overloadedGfx = new Graphics();  // animated alpha when overloaded
@@ -38,6 +39,7 @@ export function createNetwork(mode, network, callbacks = {}, overview = false) {
   const uiLayer = new Container(); // labels, switches, arrows
 
   container.addChild(bNodeLayer);
+  container.addChild(ringParticleLayer);
   container.addChild(lineShadowGfx);
   container.addChild(normalLinesGfx);
   container.addChild(overloadedGfx);
@@ -140,7 +142,7 @@ export function createNetwork(mode, network, callbacks = {}, overview = false) {
 
     // Particles that travel around the ring between connection points,
     // each arc at a speed matching the bus current flowing through it.
-    addRingParticles(network, id, node.x, node.y, particleLayer, particles);
+    addRingParticles(network, id, node.x, node.y, ringParticleLayer, particles);
   }
 
   // ── Regular nodes ──────────────────────────────────────────────
