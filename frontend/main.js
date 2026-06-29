@@ -410,7 +410,8 @@ async function loadGuestLevel(levelNum) {
     document.getElementById('useRedispatch').style.display      = 'block';
     document.getElementById('validateRedispatch').style.display = 'none';
     document.getElementById('cancelRedispatch').style.display   = 'none';
-    document.getElementById('redispatchUnbalance').textContent  = '';
+    document.getElementById('redispatchUnbalance').style.display = 'none';
+    document.getElementById('redispatchUnbalance').textContent   = '';
     document.getElementById('validateRedispatch').textContent   = '0€';
     document.getElementById('validateRedispatch').disabled      = false;
     updateNetwork(ctx, JSON.parse(sessionStorage.getItem('network')), callbacks);
@@ -526,7 +527,8 @@ function syncRedispatchUI(network) {
   const cost      = network.redispatch.cost;
   const balEl     = document.getElementById('redispatchUnbalance');
   const valBtn    = document.getElementById('validateRedispatch');
-  balEl.textContent  = unbalance !== 0 ? `Power unbalance: ${unbalance}` : '';
+  balEl.style.display = unbalance !== 0 ? 'block' : 'none';
+  balEl.textContent   = unbalance !== 0 ? `Power unbalance: ${unbalance}` : '';
   valBtn.disabled    = unbalance !== 0;
   valBtn.textContent = `${cost.toFixed(0)}€`;
 }
