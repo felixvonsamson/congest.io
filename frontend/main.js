@@ -1,19 +1,41 @@
 import { Application, Container, Graphics } from 'pixi.js';
-import { config } from './config.js';
+import { config, themes } from './config.js';
 import { updateNetwork, toggleSwitch } from './network/updateNetwork.js';
 import { calculatePowerFlow } from './network/powerFlow.js';
-import { particleColor } from './network/createNetwork.js';
-import { ensureLoggedIn, authHeaders } from './auth/auth.js';
+import { makeBNodeContainer, SPLIT_SCALE } from './network/createNetwork.js';
+import { ensureLoggedIn, authHeaders, isGuest, setGuestProgress } from './auth/auth.js';
 import { renderOverviewToImage } from './level_image_halper.js';
 
 const MINIMAP_SIZE = 350;
 
+// Apply saved theme before Pixi initializes so the background color is correct
+{
+  const t = document.documentElement.dataset.theme || 'dark';
+  if (t !== 'dark') Object.assign(config.colors, themes[t]);
+}
+
 // Module-scope so load_level (exported below) can close over them
 // after the async IIFE has finished setup.
-let app, world, ctx, callbacks;
+let app, minimapApp, world, ctx, callbacks;
 
 export function load_level(level) {
+  window._solvedExploring = false;
+  document.getElementById('solvedPill').style.display = 'none';
+
   const player = JSON.parse(sessionStorage.getItem('player'));
+
+  if (player.is_guest) {
+    loadGuestLevel(level).then(network => {
+      player.current_level = level;
+      sessionStorage.setItem('player', JSON.stringify(player));
+      setGuestProgress({ current_level: level, unlocked_levels: player.unlocked_levels, money: player.money });
+      sessionStorage.setItem('network', JSON.stringify(network));
+      updateNetwork(ctx, network, callbacks);
+      fitCamera(network);
+    });
+    return;
+  }
+
   fetch('/api/load_level', {
     method:  'POST',
     headers: authHeaders(),
@@ -27,6 +49,20 @@ export function load_level(level) {
       updateNetwork(ctx, data, callbacks);
       fitCamera(data);
     });
+}
+
+async function loadGuestLevel(levelNum) {
+  const res = await fetch(`/static/levels/Level${levelNum}.json`);
+  const data = await res.json();
+  const network = {
+    nodes: data.nodes,
+    lines: data.lines,
+    cost: 1000000,
+    redispatch: { cost: 0, unbalance: 0, adjustments: {} },
+    level: levelNum,
+    tutorial_info: data.tutorial_info ?? null,
+  };
+  return calculatePowerFlow(network);
 }
 
 // ── Async setup ───────────────────────────────────────────────────
@@ -47,7 +83,7 @@ export function load_level(level) {
   app.stage.addChild(world);
 
   // ── Minimap PixiJS app ───────────────────────────────────────
-  const minimapApp = new Application();
+  minimapApp = new Application();
   await minimapApp.init({
     width:           MINIMAP_SIZE,
     height:          MINIMAP_SIZE,
@@ -116,7 +152,7 @@ export function load_level(level) {
       if (p.t < 0) p.t += 1;
       p.gfx.x    = p.from.x + (p.to.x - p.from.x) * p.t;
       p.gfx.y    = p.from.y + (p.to.y - p.from.y) * p.t;
-      p.gfx.tint = particleColor(p.from_b, p.to_b, p.t);
+      p.gfx.tint = p.color;
     }
 
     // Overloaded lines pulse
@@ -238,8 +274,6 @@ export function load_level(level) {
 
   // ── Keyboard shortcuts ───────────────────────────────────────
   window.addEventListener('keydown', (e) => {
-    if (document.getElementById('authPanel').style.display !== 'none') return;
-
     // S — auto-solve
     if (e.key === 's' || e.key === 'S') {
       const network = JSON.parse(sessionStorage.getItem('network'));
@@ -330,6 +364,29 @@ export function load_level(level) {
     next_level();
   });
 
+  document.getElementById('viewSolutionBtn').addEventListener('click', () => {
+    const overlay = document.getElementById('solvedOverlay');
+    overlay.style.opacity = '0';
+    overlay.addEventListener('transitionend', () => {
+      overlay.style.display = 'none';
+      overlay.style.opacity = '';
+    }, { once: true });
+
+    window._solvedExploring = true;
+
+    const pill = document.getElementById('solvedPill');
+    pill.classList.remove('entering');
+    pill.style.display = 'flex';
+    requestAnimationFrame(() => requestAnimationFrame(() => pill.classList.add('entering')));
+  });
+
+  document.getElementById('nextLevelBtnPill').addEventListener('click', () => {
+    const pill      = document.getElementById('nextLevelBtnPill');
+    pill.disabled    = true;
+    pill.textContent = 'Loading…';
+    next_level();
+  });
+
   document.getElementById('useRedispatch').addEventListener('click', () => {
     sessionStorage.setItem('network_before_redispatch', sessionStorage.getItem('network'));
     settings.mode = 'redispatch';
@@ -365,15 +422,20 @@ export function load_level(level) {
   const loggedIn = await ensureLoggedIn();
   if (!loggedIn) return;
 
+  const player = JSON.parse(sessionStorage.getItem('player'));
   let network = JSON.parse(sessionStorage.getItem('network'));
+
   if (!network) {
-    const player   = JSON.parse(sessionStorage.getItem('player'));
-    const response = await fetch('/api/load_level', {
-      method:  'POST',
-      headers: authHeaders(),
-      body:    JSON.stringify({ level_num: player.current_level }),
-    });
-    network = await response.json();
+    if (player.is_guest) {
+      network = await loadGuestLevel(player.current_level);
+    } else {
+      const response = await fetch('/api/load_level', {
+        method:  'POST',
+        headers: authHeaders(),
+        body:    JSON.stringify({ level_num: player.current_level }),
+      });
+      network = await response.json();
+    }
     sessionStorage.setItem('network', JSON.stringify(network));
   }
 
@@ -408,7 +470,25 @@ function fitCamera(network) {
 }
 
 function next_level() {
+  window._solvedExploring = false;
+  document.getElementById('solvedPill').style.display = 'none';
+
   const player = JSON.parse(sessionStorage.getItem('player'));
+  const btn = document.getElementById('nextLevelBtn');
+
+  if (player.is_guest) {
+    loadGuestLevel(player.current_level + 1).then(network => {
+      player.current_level += 1;
+      sessionStorage.setItem('player', JSON.stringify(player));
+      sessionStorage.setItem('network', JSON.stringify(network));
+      updateNetwork(ctx, network, callbacks);
+      fitCamera(network);
+      btn.disabled    = false;
+      btn.textContent = 'Next Level →';
+    });
+    return;
+  }
+
   fetch('/api/load_level', {
     method:  'POST',
     headers: authHeaders(),
@@ -420,9 +500,8 @@ function next_level() {
       sessionStorage.setItem('player', JSON.stringify(player));
       updateNetwork(ctx, data, callbacks);
       fitCamera(data);
-      const btn       = document.getElementById('nextLevelBtn');
       btn.disabled    = false;
-      btn.textContent = 'Next Level';
+      btn.textContent = 'Next Level →';
     });
 }
 
@@ -452,3 +531,11 @@ function showErrorToast(html) {
   document.body.appendChild(toast);
   setTimeout(() => toast.remove(), 4000);
 }
+
+window._applyTheme = function(theme) {
+  Object.assign(config.colors, themes[theme]);
+  if (app)        app.renderer.background.color        = config.colors.background;
+  if (minimapApp) minimapApp.renderer.background.color = config.colors.background;
+  const network = JSON.parse(sessionStorage.getItem('network'));
+  if (network && ctx && callbacks) updateNetwork(ctx, network, callbacks);
+};

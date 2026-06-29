@@ -13,7 +13,7 @@ export const SPLIT_SCALE = 0.8;
  * @param {boolean} overview  simplified rendering for the minimap
  * @returns {{ container, particles, uiElements, overloadedGfx }}
  *   - container:    add to world / overviewWorld
- *   - particles:    animate in ticker  { gfx, from, to, t, speed, from_b, to_b }
+ *   - particles:    animate in ticker  { gfx, from, to, t, speed, color }
  *   - uiElements:   inverse-scale each tick so they stay pixel-constant at any zoom
  *   - overloadedGfx pulse alpha in ticker when there are overloaded lines
  */
@@ -79,7 +79,8 @@ export function createNetwork(mode, network, callbacks = {}, overview = false) {
     // Flow label
     const flow = Math.abs(line.flow);
     const flowText = flow >= 49.5 && flow <= 50.5 ? flow.toFixed(1) : flow.toFixed(0);
-    const flowLabel = makeBadge(flowText, 0xffff00, 16);
+    const flowTextColor = overloaded ? config.colors.chipTextOverload : config.colors.chipText;
+    const flowLabel = makeBadge(flowText, flowTextColor, 11);
     flowLabel.x = (from.x + to.x) / 2;
     flowLabel.y = (from.y + to.y) / 2;
     uiLayer.addChild(flowLabel);
@@ -89,25 +90,25 @@ export function createNetwork(mode, network, callbacks = {}, overview = false) {
     const effectiveLen = Math.hypot(x2 - x1, y2 - y1) || 1;
     const nParticles = Math.max(1, Math.floor(effectiveLen / 10));
     const speed = line.flow / effectiveLen * 2;
+    const dotColor = overloaded ? config.colors.overloadDot : config.colors.flowDot;
 
     for (let i = 0; i < nParticles; i++) {
       const gfx = new Graphics();
       gfx.circle(0, 0, config.sizes.particleRadius).fill(0xffffff);
+      gfx.tint = dotColor;
       particleLayer.addChild(gfx);
 
       const t0 = i / nParticles;
       gfx.x = x1 + (x2 - x1) * t0;
       gfx.y = y1 + (y2 - y1) * t0;
-      gfx.tint = particleColor(from.id.includes('b'), to.id.includes('b'), t0);
 
       particles.push({
         gfx,
         from: { x: x1, y: y1 },
         to: { x: x2, y: y2 },
-        from_b: from.id.includes('b'),
-        to_b: to.id.includes('b'),
         t: t0,
         speed,
+        color: dotColor,
       });
     }
 
@@ -163,7 +164,7 @@ export function createNetwork(mode, network, callbacks = {}, overview = false) {
     if (overview) continue;
 
     // Injection label
-    const injLabel = makeLabel(node.injection.toFixed(0), 'white', 16);
+    const injLabel = makeLabel(node.injection.toFixed(0), config.colors.labelText, 16);
     injLabel.x = node.x;
     injLabel.y = node.y;
     uiLayer.addChild(injLabel);
@@ -203,28 +204,22 @@ export function createNetwork(mode, network, callbacks = {}, overview = false) {
 function makeLabel(text, fill, fontSize) {
   const t = new Text({
     text,
-    style: {
-      fill,
-      fontSize,
-      fontWeight: 'bold',
-      fontFamily: 'sans-serif',
-      dropShadow: { color: '#000000', blur: 6, distance: 0, alpha: 1 },
-    },
+    style: { fill, fontSize, fontWeight: 'bold', fontFamily: 'sans-serif' },
   });
   t.anchor.set(0.5);
   return t;
 }
 
-function makeBadge(text, fill, fontSize) {
-  const t = new Text({ text, style: { fill, fontSize, fontWeight: 'bold', fontFamily: 'sans-serif' } });
+function makeBadge(text, textColor, fontSize) {
+  const t = new Text({ text, style: { fill: textColor, fontSize, fontWeight: 'bold', fontFamily: 'sans-serif' } });
   t.anchor.set(0.5);
-  // t.width is computed from the canvas texture — use it if available, otherwise estimate
   const tw = t.width > 0 ? t.width : text.length * fontSize * 0.65;
   const th = t.height > 0 ? t.height : fontSize * 1.4;
-  const px = 5, py = 2;
+  const px = 8, py = 4;
   const bg = new Graphics();
   bg.roundRect(-tw / 2 - px, -th / 2 - py, tw + px * 2, th + py * 2, 4)
-    .fill({ color: 0x111111, alpha: 0.80 });
+    .fill({ color: config.colors.chipBg, alpha: 1 })
+    .stroke({ width: 1.5, color: config.colors.chipBorder });
   const c = new Container();
   c.addChild(bg, t);
   return c;
@@ -234,14 +229,13 @@ function makeSwitch(isB) {
   const g = new Graphics();
   const r = config.sizes.switchRadius;
   if (isB) {
-    g.circle(0, 0, r).fill({ color: 0xc8c8c8, alpha: 0.2 });
-    g.circle(0, 0, r + 4).stroke({ width: 3, color: 0xc8c8c8, alpha: 0.9 });
+    g.circle(0, 0, r).fill({ color: config.colors.switch });
+    g.circle(0, 0, r + 2.5).stroke({ width: 2.5, color: config.colors.switchActive });
   } else {
-    g.circle(0, 0, r).fill({ color: 0xc8c8c8, alpha: 0.9 });
-    g.circle(0, 0, r + 4).stroke({ width: 3, color: 0xc8c8c8, alpha: 0.2 });
+    g.circle(0, 0, r).fill({ color: config.colors.switchActive });
+    g.circle(0, 0, r + 2.5).stroke({ width: 2.5, color: config.colors.switch });
   }
-  // Hit area is 2× the visual radius so switches are easy to tap
-  g.hitArea = new Circle(0, 0, r * 2);
+  g.hitArea = new Circle(0, 0, r * 3);
   return g;
 }
 
@@ -287,7 +281,7 @@ export function makeBNodeContainer(x, y) {
   const ringW = config.sizes.ringRadiusOuter - config.sizes.ringRadiusInner;
   const ringMid = (config.sizes.ringRadiusOuter + config.sizes.ringRadiusInner) / 2;
   const g = new Graphics();
-  g.circle(0, 0, ringMid).stroke({ width: ringW, color: config.colors.bNode });
+  g.circle(0, 0, ringMid).stroke({ width: ringW, color: config.colors.line });
   const c = new Container();
   c.x = x;
   c.y = y;
@@ -295,27 +289,3 @@ export function makeBNodeContainer(x, y) {
   return c;
 }
 
-// ── Particle colour (matches original Three.js HSL animation) ────
-
-export function particleColor(from_b, to_b, t) {
-  if (from_b && to_b) return hsl(0.14, 1, 1.0);
-  if (to_b) return hsl(0.14, 1, 0.5 + 0.5 * t);
-  if (from_b) return hsl(0.14, 1, 1.0 - 0.5 * t);
-  return hsl(0.14, 1, 0.5);
-}
-
-function hsl(h, s, l) {
-  const c = (1 - Math.abs(2 * l - 1)) * s;
-  const x = c * (1 - Math.abs(((h * 6) % 2) - 1));
-  const m = l - c / 2;
-  let r, g, b;
-  if (h < 1 / 6) { r = c; g = x; b = 0; }
-  else if (h < 2 / 6) { r = x; g = c; b = 0; }
-  else if (h < 3 / 6) { r = 0; g = c; b = x; }
-  else if (h < 4 / 6) { r = 0; g = x; b = c; }
-  else if (h < 5 / 6) { r = x; g = 0; b = c; }
-  else { r = c; g = 0; b = x; }
-  return (Math.round((r + m) * 255) << 16)
-    | (Math.round((g + m) * 255) << 8)
-    | Math.round((b + m) * 255);
-}

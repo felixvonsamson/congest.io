@@ -1,3 +1,5 @@
+/* Game-specific layout — everything visual is handled by Tailwind */
+
 body {
     margin: 0;
     overflow: hidden;
@@ -6,12 +8,6 @@ body {
 canvas {
     display: block;
 }
-
-a {
-    color: #6b7aff;
-}
-
-/* ── Layout ────────────────────────────────────────────────── */
 
 #app {
     position: fixed;
@@ -28,255 +24,35 @@ a {
     width: min(40vw, 350px);
     height: min(40vw, 350px);
     overflow: hidden;
-    outline: #999999 solid 2px;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    border-right: 1px solid rgba(255, 255, 255, 0.12);
     z-index: 100;
-    /* pointer-events handled naturally: minimap sits on top of main canvas */
 }
 
-/* ── Level info ─────────────────────────────────────────────── */
-
-#LevelInfoPanel {
-    position: fixed;
-    top: 0;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 1000;
-    padding: 10px;
-    border-radius: 0 0 8px 8px;
-    background: #fff;
-    font-family: sans-serif;
-    font-size: 24px;
-    color: #333;
-}
-
-/* ── Top-right HUD ──────────────────────────────────────────── */
-
-#topRightUI {
-    position: fixed;
-    top: 12px;
-    right: 12px;
-    z-index: 1000;
-    color: #fff;
-    font-family: 'Trebuchet MS';
-    font-size: 32px;
-}
-
-/* ── Bottom-right HUD ───────────────────────────────────────── */
-
-#bottomRightUI {
-    position: fixed;
-    bottom: 12px;
-    right: 12px;
-    z-index: 1000;
-    color: #fff;
-    font-family: 'Trebuchet MS';
-    font-size: 20px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
-}
-
-/* ── Solved overlay ─────────────────────────────────────────── */
-
-#solvedOverlay {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    z-index: 2000;
-    padding: 24px 32px;
-    border-radius: 12px;
-    background: rgba(0, 0, 0, 0.8);
-    text-align: center;
-    font-family: Arial, sans-serif;
-    display: none;
-}
-
-#solvedMessage {
-    font-size: 48px;
-    font-weight: 700;
-    margin-bottom: 16px;
-    line-height: 1;
-    color: #fff;
-}
-
-#rewardMessage {
-    font-size: 24px;
-    margin-bottom: 24px;
-    color: #ffeb3b;
-}
-
-#nextLevelBtn {
-    padding: 12px 24px;
-    font-size: 24px;
-}
-
-/* ── Tutorial hint ──────────────────────────────────────────── */
-
-#tutorialHelp {
-    position: fixed;
-    bottom: 0;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 1000;
-    padding: 16px 24px;
-    border-radius: 16px 16px 0 0;
-    background: rgba(0, 0, 0, 0.8);
-    color: white;
-    font-family: sans-serif;
-    font-size: 18px;
-    width: min(1000px, 80%);
-    text-align: center;
-    display: none;
-}
-
-/* ── Buttons ────────────────────────────────────────────────── */
-
-.button {
-    padding: 8px 16px;
-    font-size: 20px;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    min-width: 120px;
-}
-
-.blue {
-    background: #2196F3;
-    color: #fff;
-}
-
-.grey {
-    background: #bbbbbb;
-    color: #000;
-}
-
-.red {
-    background: #f44336;
-    color: #fff;
-}
-
-.button.blue:hover  { background: #0758a8; }
-.button.grey:hover  { background: #999999; }
-.button.red:hover   { background: #d32f2f; }
-
-.button:disabled {
-    background: #777777;
-    cursor: not-allowed;
-}
-
-#helpBtn {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    background: #1976d2;
-    color: #fff;
-    border: none;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-    cursor: help;
-    font-size: 24px;
-    font-weight: bold;
-}
-
-.closeBtn {
-    position: absolute;
-    top: 12px;
-    right: 12px;
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    background: #e53935;
-    color: #fff;
-    border: none;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-    cursor: pointer;
-    font-size: 20px;
-    font-weight: bold;
-}
-
-/* ── Panels (auth, level selection, help) ───────────────────── */
-
-#authPanel {
-    z-index: 1002;
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background: #202020;
-    border: 4px solid #fff;
-    padding: 16px 32px;
-    border-radius: 16px;
-    max-width: 400px;
-    font-family: sans-serif;
-    color: #fff;
-    font-size: 18px;
-}
-
-#levelSelectionPanel {
-    z-index: 800;
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background: #202020;
-    border: 4px solid #fff;
-    padding: 16px 32px;
-    border-radius: 16px;
-    max-width: 900px;
-    width: 80vw;
-    height: 80vh;
-    font-family: 'Trebuchet MS';
-    color: #fff;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    font-size: 18px;
-}
-
-#helpPanel {
-    z-index: 1001;
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background: #202020;
-    border: 4px solid #fff;
-    padding: 16px 32px;
-    border-radius: 16px;
-    max-width: 600px;
-    font-family: sans-serif;
-    color: #fff;
-    font-size: 18px;
-}
-
-/* ── Level selection grid ───────────────────────────────────── */
-
-#levelList {
-    height: 70vh;
-    overflow-y: scroll;
-    scrollbar-width: none;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 32px;
-    margin: 16px;
-    justify-content: center;
-}
-
+/* Level grid items */
 .levelItem {
     position: relative;
-    width: 180px;
-    height: 180px;
+    width: 148px;
+    height: 148px;
     cursor: pointer;
-    transition: transform 0.15s ease;
+    border-radius: 10px;
+    overflow: hidden;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
-.levelItem:hover { transform: scale(1.05); }
+.levelItem:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.8), 0 8px 24px rgba(0, 0, 0, 0.5);
+}
 
 .lockedLevel {
-    filter: grayscale(100%) opacity(0.4);
+    filter: grayscale(1) opacity(0.3);
     cursor: not-allowed;
+}
+
+.lockedLevel:hover {
+    transform: none;
+    box-shadow: none;
 }
 
 .levelThumbnail {
@@ -291,49 +67,200 @@ a {
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    font-size: 40px;
-    font-weight: bold;
+    font-size: 32px;
+    font-weight: 800;
     color: #fff;
-    text-shadow: 0 0 20px rgba(0,0,0,1), 0 0 40px rgba(0,0,0,0.8);
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    text-shadow: 0 0 12px rgba(0, 0, 0, 1), 0 0 32px rgba(0, 0, 0, 0.9);
+    letter-spacing: -0.5px;
 }
 
-/* ── Toast ──────────────────────────────────────────────────── */
+/* Hide empty redispatch warning box */
+#redispatchUnbalance:empty {
+    display: none !important;
+}
 
+/* Hide empty money badge */
+.money-badge:empty {
+    display: none;
+}
+
+/* Toast notification */
 .error-toast {
     position: fixed;
     bottom: 20px;
     left: 50%;
     transform: translate(-50%, 0);
-    background: rgb(197, 0, 0);
+    background: #991b1b;
     color: white;
-    padding: 16px 24px;
-    border-radius: 8px;
-    font-family: sans-serif;
-    font-size: 18px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-    animation: fadeInOut 5s ease-in-out;
+    padding: 12px 20px;
+    border-radius: 10px;
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+    animation: fadeInOut 4s ease-in-out forwards;
     text-align: center;
-    z-index: 1002;
+    z-index: 9999;
+    max-width: 400px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 @keyframes fadeInOut {
-    0%   { opacity: 0; transform: translate(-50%, 20px); }
-    10%  { opacity: 1; transform: translate(-50%, 0); }
-    90%  { opacity: 1; transform: translate(-50%, 0); }
-    100% { opacity: 0; transform: translate(-50%, 20px); }
+    0%   { opacity: 0; transform: translate(-50%, 16px); }
+    12%  { opacity: 1; transform: translate(-50%, 0); }
+    85%  { opacity: 1; transform: translate(-50%, 0); }
+    100% { opacity: 0; transform: translate(-50%, 16px); }
 }
 
-/* ── Misc ───────────────────────────────────────────────────── */
+/* ── Solved celebration ──────────────────────────────────────────── */
 
-.flex-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
+#solvedOverlay {
+    transition: opacity 1s ease-out;
 }
 
-#menuButtons {
-    margin-top: 8px;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 8px;
+/* ── Light theme ──────────────────────────────────────────────────── */
+
+html[data-theme="light"] #minimap {
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+/* Top panels */
+html[data-theme="light"] #LevelInfoPanel {
+  background: rgba(255, 255, 255, 0.92);
+  color: #111827;
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+html[data-theme="light"] #moneyAmount {
+  background: rgba(255, 255, 255, 0.92);
+  color: #d97706;
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+html[data-theme="light"] #helpBtn,
+html[data-theme="light"] #themeToggleBtn {
+  background: rgba(255, 255, 255, 0.92);
+  color: #374151;
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+html[data-theme="light"] #helpBtn:hover,
+html[data-theme="light"] #themeToggleBtn:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+html[data-theme="light"] #guestSignInBtn {
+  background: rgba(255, 255, 255, 0.92);
+  color: #d97706;
+  border-color: rgba(245, 158, 11, 0.35);
+}
+
+/* Menu dropdown */
+html[data-theme="light"] #menuButtons button {
+  background: rgba(255, 255, 255, 0.97);
+  color: #111827;
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+html[data-theme="light"] #menuButtons button:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: #111827;
+}
+
+html[data-theme="light"] #menuButtons button svg {
+  color: #9ca3af;
+}
+
+/* Bottom-right panels */
+html[data-theme="light"] #solvedPill {
+  background: rgba(255, 255, 255, 0.97);
+  border-color: rgba(5, 150, 105, 0.35);
+}
+
+html[data-theme="light"] #solvedPill span {
+  color: #059669;
+}
+
+html[data-theme="light"] #redispatchUnbalance {
+  background: rgba(255, 255, 255, 0.92);
+  color: #dc2626;
+  border-color: rgba(220, 38, 38, 0.35);
+}
+
+html[data-theme="light"] #redispatchCost {
+  background: rgba(255, 255, 255, 0.92);
+  color: #6b7280;
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+/* Tutorial hint */
+html[data-theme="light"] #tutorialHelp {
+  background: rgba(255, 255, 255, 0.97);
+  color: #111827;
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+/* Level selection modal */
+html[data-theme="light"] #levelSelectionPanel {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+html[data-theme="light"] #levelSelectionPanel > div {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+html[data-theme="light"] #levelSelectionPanel > div > div:first-child {
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+html[data-theme="light"] #levelSelectionPanel h2 {
+  color: #111827;
+}
+
+html[data-theme="light"] #levelSelectionPanel button[aria-label="Close"] {
+  color: #9ca3af;
+}
+
+html[data-theme="light"] #levelSelectionPanel button[aria-label="Close"]:hover {
+  color: #111827;
+  background: rgba(0, 0, 0, 0.05);
+}
+
+/* Solved overlay */
+html[data-theme="light"] #solvedOverlay {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+html[data-theme="light"] #solvedCard {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+html[data-theme="light"] #solvedMessage {
+  color: #111827;
+}
+
+html[data-theme="light"] #rewardMessage {
+  color: #d97706;
+}
+
+html[data-theme="light"] #viewSolutionBtn {
+  color: #9ca3af;
+}
+
+html[data-theme="light"] #viewSolutionBtn:hover {
+  color: #374151;
+  background: rgba(0, 0, 0, 0.04);
+}
+
+/* Solved pill entrance */
+#solvedPill.entering {
+    animation: solvedPillIn 0.28s ease-out forwards;
+}
+
+@keyframes solvedPillIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0);   }
 }

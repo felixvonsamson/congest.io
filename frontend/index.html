@@ -1,97 +1,257 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>congest.io</title>
+  <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="./styling.css">
+  <script>document.documentElement.dataset.theme = localStorage.getItem('theme') || 'dark';</script>
 </head>
 
 <body>
   <script type="module" src="./main.js"></script>
   <script type="module" src="./ui/level_selection.js"></script>
 
-  <!-- PixiJS appends its canvas here -->
+  <!-- PixiJS canvas -->
   <div id="app"></div>
 
-  <!-- Minimap (second PixiJS app) -->
+  <!-- Minimap -->
   <div id="minimap"></div>
 
-  <div id="LevelInfoPanel" class="ui-element">Loading...</div>
-
-  <div id="topRightUI">
-    <div class="flex-row">
-      <div id="moneyAmount"></div>
-      <button id="helpBtn" aria-label="Help" class="ui-element">?</button>
-      <button id="menuBtn" aria-label="Menu" class="ui-element button blue"><b>Menu</b></button>
-    </div>
-    <div id="menuButtons" style="display:none;">
-      <button id="levelSelection" class="button grey">Levels</button>
-      <button id="authButton" class="button grey">Login</button>
-    </div>
+  <!-- Top center: Level indicator -->
+  <div id="LevelInfoPanel"
+       class="fixed top-0 left-1/2 -translate-x-1/2 z-[1000]
+              px-5 py-2 rounded-b-2xl
+              bg-gray-900/90 backdrop-blur-md
+              border-x border-b border-white/[0.08]
+              text-white text-base font-semibold tracking-wide
+              shadow-xl shadow-black/50 select-none">
+    Loading...
   </div>
 
-  <div id="bottomRightUI">
-    <div id="redispatchUnbalance" style="color:red;font-weight:bold;margin-bottom:4px;"></div>
-    <div id="redispatchCost" style="margin-bottom:4px; display:none;"></div>
-    <div class="flex-row">
-      <button id="useRedispatch" class="button blue">Redispatch</button>
-      <button id="validateRedispatch" class="button blue" style="display:none">Confirm</button>
-      <button id="cancelRedispatch" class="button red" style="display:none">Cancel</button>
-    </div>
-  </div>
-
-  <div id="levelSelectionPanel" class="ui-element" style="display:none">
-    <button aria-label="Close level selection" class="closeBtn" onclick="this.parentElement.style.display='none'">✕</button>
-    <h1 style="text-align:center;">Levels</h1>
-    <div id="levelList"></div>
-  </div>
-
-  <div id="authPanel" class="ui-element" style="display:none">
-    <button aria-label="Close auth" class="closeBtn" onclick="this.parentElement.style.display='none'">✕</button>
-    <div id="authContainer">
-      <div id="loginForm">
-        <h2>Login</h2>
-        <input type="text" placeholder="username" id="loginUsername">
-        <input type="password" placeholder="Password" id="loginPassword">
-        <button id="loginBtn">Login</button>
-        <p>Don't have an account? <a href="#" id="switchToSignup">Sign up</a></p>
+  <!-- Top right: Money + controls -->
+  <div id="topRightUI" class="fixed top-3 right-3 z-[1000] flex flex-col items-end gap-2">
+    <div class="flex items-center gap-2">
+      <!-- Guest sign-in CTA (only shown for guests) -->
+      <button id="guestSignInBtn" style="display:none;"
+              onclick="window.location.href='/login.html'"
+              class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl
+                     bg-gray-900/90 backdrop-blur-md border border-amber-500/30
+                     text-amber-400 hover:text-amber-300 text-xs font-medium
+                     hover:bg-amber-500/10 transition-colors shadow-lg shadow-black/50">
+        <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"/>
+        </svg>
+        Sign In
+      </button>
+      <!-- Money badge -->
+      <div id="moneyAmount"
+           class="px-3 py-1.5 rounded-full
+                  bg-gray-900/90 backdrop-blur-md
+                  border border-white/[0.08]
+                  text-yellow-400 font-bold text-sm
+                  shadow-lg shadow-black/50 select-none
+                  money-badge">
       </div>
-      <div id="signupForm" style="display:none">
-        <h2>Sign Up</h2>
-        <input type="text" placeholder="Username" id="signupUsername">
-        <input type="password" placeholder="Password" id="signupPassword">
-        <input type="password" placeholder="Confirm Password" id="signupConfirmPassword">
-        <button id="signupBtn">Sign Up</button>
-        <p>Already have an account? <a href="#" id="switchToLogin">Login</a></p>
+      <!-- Help -->
+      <button id="helpBtn" aria-label="Tutorial"
+              class="w-9 h-9 flex items-center justify-center rounded-full
+                     bg-gray-900/90 backdrop-blur-md border border-white/[0.08]
+                     text-white text-sm font-bold
+                     hover:bg-white/10 active:bg-white/20 transition-colors
+                     shadow-lg shadow-black/50">
+        ?
+      </button>
+      <!-- Theme toggle -->
+      <button id="themeToggleBtn" aria-label="Toggle theme"
+              class="w-9 h-9 flex items-center justify-center rounded-full
+                     bg-gray-900/90 backdrop-blur-md border border-white/[0.08]
+                     text-white
+                     hover:bg-white/10 active:bg-white/20 transition-colors
+                     shadow-lg shadow-black/50">
+        <svg id="themeIconSun" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="5"/>
+          <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+          <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+        </svg>
+        <svg id="themeIconMoon" style="display:none;" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+      </button>
+      <!-- Menu button -->
+      <button id="menuBtn" aria-label="Menu"
+              class="flex items-center gap-2 px-3.5 py-2 rounded-xl
+                     bg-blue-600 hover:bg-blue-500 active:bg-blue-700
+                     text-white text-sm font-semibold
+                     shadow-lg shadow-black/50 transition-colors select-none">
+        <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"/>
+        </svg>
+        Menu
+      </button>
+    </div>
+
+    <!-- Dropdown -->
+    <div id="menuButtons" style="display:none;"
+         class="flex flex-col gap-1 min-w-[148px]">
+      <button id="levelSelection"
+              class="px-4 py-2.5 rounded-xl text-left flex items-center gap-2.5
+                     bg-gray-900/95 backdrop-blur-md border border-white/[0.08]
+                     text-white text-sm font-medium
+                     hover:bg-white/10 active:bg-white/20 transition-colors
+                     shadow-lg shadow-black/50">
+        <svg class="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12"/>
+        </svg>
+        Levels
+      </button>
+      <button id="authButton"
+              class="px-4 py-2.5 rounded-xl text-left flex items-center gap-2.5
+                     bg-gray-900/95 backdrop-blur-md border border-white/[0.08]
+                     text-white text-sm font-medium
+                     hover:bg-white/10 active:bg-white/20 transition-colors
+                     shadow-lg shadow-black/50">
+        <svg class="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"/>
+        </svg>
+        <span>Login</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Bottom right: Redispatch controls + solved pill -->
+  <div id="bottomRightUI" class="fixed bottom-3 right-3 z-[1000] flex flex-col items-end gap-2">
+    <!-- Solved pill (exploration mode — shown after dismissing the overlay) -->
+    <div id="solvedPill" style="display:none;"
+         class="flex items-center gap-3 px-4 py-2.5 rounded-2xl
+                bg-gray-900/95 backdrop-blur-md border border-emerald-500/30
+                shadow-lg shadow-black/50">
+      <span class="text-emerald-400 text-sm font-semibold select-none">⚡ Solved!</span>
+      <button id="nextLevelBtnPill"
+              class="px-3 py-1.5 rounded-lg text-xs font-semibold
+                     bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white
+                     transition-colors shadow-md shadow-black/40">
+        Next Level →
+      </button>
+    </div>
+    <div id="redispatchUnbalance"
+         class="px-3 py-1.5 rounded-lg text-red-400 text-xs font-semibold
+                bg-gray-900/90 backdrop-blur-md border border-red-500/30
+                shadow-lg shadow-black/50">
+    </div>
+    <div id="redispatchCost" style="display:none;"
+         class="px-3 py-1.5 rounded-lg text-gray-300 text-xs
+                bg-gray-900/90 backdrop-blur-md border border-white/[0.08]
+                shadow-lg shadow-black/50">
+    </div>
+    <div class="flex gap-2">
+      <button id="useRedispatch"
+              class="px-4 py-2 rounded-xl text-sm font-semibold
+                     bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white
+                     shadow-lg shadow-black/50 transition-colors">
+        Redispatch
+      </button>
+      <button id="validateRedispatch" style="display:none"
+              class="px-4 py-2 rounded-xl text-sm font-semibold
+                     bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white
+                     shadow-lg shadow-black/50 transition-colors">
+        Confirm
+      </button>
+      <button id="cancelRedispatch" style="display:none"
+              class="px-4 py-2 rounded-xl text-sm font-semibold
+                     bg-red-600 hover:bg-red-500 active:bg-red-700 text-white
+                     shadow-lg shadow-black/50 transition-colors">
+        Cancel
+      </button>
+    </div>
+  </div>
+
+  <!-- Level selection modal -->
+  <div id="levelSelectionPanel" style="display:none;"
+       class="fixed inset-0 z-[800] bg-black/60 backdrop-blur-sm">
+    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2
+                w-[88vw] max-w-4xl h-[82vh]
+                bg-gray-900 border border-white/10 rounded-2xl shadow-2xl
+                flex flex-col overflow-hidden">
+      <!-- Header -->
+      <div class="flex items-center justify-between px-6 py-4 border-b border-white/[0.08] shrink-0">
+        <h2 class="text-lg font-bold text-white tracking-wide">Select Level</h2>
+        <button aria-label="Close"
+                onclick="document.getElementById('levelSelectionPanel').style.display='none'"
+                class="w-8 h-8 flex items-center justify-center rounded-full
+                       text-gray-500 hover:text-white hover:bg-white/10 text-lg transition-colors">
+          ✕
+        </button>
+      </div>
+      <!-- Grid -->
+      <div id="levelList"
+           class="flex-1 overflow-y-auto p-5 flex flex-wrap gap-4 justify-center content-start"
+           style="scrollbar-width: none;">
       </div>
     </div>
-    <div id="authError" style="color:red;font-size:0.9em;margin-top:8px;"></div>
+  </div>
+
+  <!-- Solved overlay -->
+  <div id="solvedOverlay" style="display:none;"
+       class="fixed inset-0 z-[2000] bg-black/55 backdrop-blur-sm">
+    <!-- centering wrapper — no animation, just layout -->
+    <div class="absolute inset-0 flex items-center justify-center p-4">
+      <!-- animated card -->
+      <div id="solvedCard"
+           class="bg-gray-900 border border-white/10 rounded-2xl shadow-2xl
+                  p-10 text-center w-[min(88vw,380px)]">
+        <div class="text-6xl mb-4">⚡</div>
+        <div id="solvedMessage" class="text-4xl font-extrabold text-white mb-2">Solved!</div>
+        <div id="rewardMessage" class="text-xl text-yellow-400 font-semibold mb-6"></div>
+        <button id="nextLevelBtn" aria-label="Next level"
+                class="w-full py-3 rounded-xl text-base font-bold
+                       bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white
+                       shadow-lg shadow-black/50 transition-colors mb-3">
+          Next Level →
+        </button>
+        <button id="viewSolutionBtn"
+                class="w-full py-2 rounded-xl text-xs text-gray-600
+                       hover:text-gray-400 hover:bg-white/5 transition-colors">
+          View solution
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tutorial hint (bottom center) -->
+  <div id="tutorialHelp" style="display:none;"
+       class="fixed bottom-0 left-1/2 -translate-x-1/2 z-[1000]
+              px-6 py-4 rounded-t-2xl
+              bg-gray-900/95 backdrop-blur-md
+              border-x border-t border-white/[0.08]
+              text-white text-sm
+              w-[min(820px,82vw)] text-center
+              shadow-xl shadow-black/50">
   </div>
 
   <script>
-    document.getElementById('switchToSignup').addEventListener('click', (e) => {
-      e.preventDefault();
-      document.getElementById('loginForm').style.display = 'none';
-      document.getElementById('signupForm').style.display = 'block';
+    // Theme toggle
+    (function() {
+      const current = document.documentElement.dataset.theme || 'dark';
+      if (current === 'light') {
+        document.getElementById('themeIconSun').style.display = 'none';
+        document.getElementById('themeIconMoon').style.display = '';
+      }
+    })();
+
+    document.getElementById('themeToggleBtn').addEventListener('click', () => {
+      const current = document.documentElement.dataset.theme || 'dark';
+      const next = current === 'dark' ? 'light' : 'dark';
+      document.documentElement.dataset.theme = next;
+      localStorage.setItem('theme', next);
+      document.getElementById('themeIconSun').style.display  = next === 'dark' ? '' : 'none';
+      document.getElementById('themeIconMoon').style.display = next === 'light' ? '' : 'none';
+      if (window._applyTheme) window._applyTheme(next);
     });
-    document.getElementById('switchToLogin').addEventListener('click', (e) => {
-      e.preventDefault();
-      document.getElementById('signupForm').style.display = 'none';
-      document.getElementById('loginForm').style.display = 'block';
-    });
-  </script>
 
-  <div id="solvedOverlay" class="ui-element">
-    <div id="solvedMessage">Solved!</div>
-    <div id="rewardMessage"></div>
-    <button id="nextLevelBtn" aria-label="Next level" class="button blue">Next Level</button>
-  </div>
-
-  <div id="tutorialHelp" class="ui-element"></div>
-
-  <script>
     document.getElementById('helpBtn').addEventListener('click', () => {
       window.location.href = '/tutorial.html';
     });
@@ -99,16 +259,16 @@
     document.getElementById('menuBtn').addEventListener('click', () => {
       const panel = document.getElementById('menuButtons');
       panel.style.display = panel.style.display === 'none' ? 'flex' : 'none';
+      if (panel.style.display === 'flex') panel.style.flexDirection = 'column';
     });
+
     document.addEventListener('click', (e) => {
-      const menuPanel = document.getElementById('menuButtons');
-      const menuBtn = document.getElementById('menuBtn');
-      if (!menuPanel.contains(e.target) && !menuBtn.contains(e.target)) {
-        menuPanel.style.display = 'none';
+      const panel = document.getElementById('menuButtons');
+      const btn = document.getElementById('menuBtn');
+      if (!panel.contains(e.target) && !btn.contains(e.target)) {
+        panel.style.display = 'none';
       }
     });
   </script>
-
 </body>
-
 </html>
