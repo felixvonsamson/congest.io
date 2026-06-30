@@ -6,32 +6,130 @@
   <title>congest.io — Tutorial</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="./styling.css">
+  <script>document.documentElement.dataset.theme = localStorage.getItem('theme') || 'dark';</script>
+  <style>
+    /* Pulsing ring for highlighted DOM buttons */
+    @keyframes tutPulse {
+      0%   { box-shadow: 0 0 0 0   rgba(52, 211, 153, 0.7); }
+      60%  { box-shadow: 0 0 0 10px rgba(52, 211, 153, 0);   }
+      100% { box-shadow: 0 0 0 0   rgba(52, 211, 153, 0);   }
+    }
+    .tut-pulse { animation: tutPulse 1.4s ease-out infinite; }
+  </style>
 </head>
 
 <body>
   <script type="module" src="./tutorial.js"></script>
 
+  <!-- PixiJS canvas -->
   <div id="app"></div>
 
-  <!-- Back button -->
-  <div class="fixed top-3 left-3 z-[1000]">
-    <button id="skipTutorial"
-            class="flex items-center gap-2 px-3.5 py-2 rounded-xl
-                   bg-gray-900/90 backdrop-blur-md border border-white/[0.08]
-                   text-white text-sm font-semibold
-                   hover:bg-white/10 active:bg-white/20 transition-colors
-                   shadow-lg shadow-black/50">
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18"/>
-      </svg>
-      Back to game
-    </button>
+  <!-- Top center: Level indicator -->
+  <div id="LevelInfoPanel"
+       class="fixed top-0 left-1/2 -translate-x-1/2 z-[1000]
+              px-5 py-2 rounded-b-2xl
+              bg-gray-900/90 backdrop-blur-md
+              border-x border-b border-white/[0.08]
+              text-white text-base font-semibold tracking-wide
+              shadow-xl shadow-black/50 select-none">
+    Tutorial
   </div>
 
+  <!-- Top right: controls -->
+  <div id="topRightUI" class="fixed top-3 right-3 z-[1000] flex flex-col items-end gap-2">
+    <div class="flex items-center gap-2">
+      <!-- Money badge — hidden until step 12 -->
+      <div id="moneyAmount" style="display:none;"
+           class="px-3 py-1.5 rounded-full
+                  bg-gray-900/90 backdrop-blur-md
+                  border border-white/[0.08]
+                  text-yellow-400 font-bold text-sm
+                  shadow-lg shadow-black/50 select-none">
+      </div>
+      <!-- Theme toggle -->
+      <button id="themeToggleBtn" aria-label="Toggle theme"
+              class="w-9 h-9 flex items-center justify-center rounded-full
+                     bg-gray-900/90 backdrop-blur-md border border-white/[0.08]
+                     text-white hover:bg-white/10 active:bg-white/20 transition-colors
+                     shadow-lg shadow-black/50">
+        <svg id="themeIconSun" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="5"/>
+          <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+          <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+        </svg>
+        <svg id="themeIconMoon" style="display:none;" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+      </button>
+      <!-- Back to game -->
+      <button id="backToGameBtn"
+              class="flex items-center gap-2 px-3.5 py-2 rounded-xl
+                     bg-gray-900/90 backdrop-blur-md border border-white/[0.08]
+                     text-white text-sm font-semibold
+                     hover:bg-white/10 active:bg-white/20 transition-colors
+                     shadow-lg shadow-black/50">
+        <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18"/>
+        </svg>
+        Back to game
+      </button>
+    </div>
+  </div>
+
+  <!-- Bottom right: Redispatch controls -->
+  <div id="bottomRightUI" class="fixed bottom-3 right-3 z-[1000] flex flex-col items-end gap-2">
+    <div id="redispatchUnbalance" style="display:none;"
+         class="px-3 py-1.5 rounded-lg text-red-400 text-xs font-semibold
+                bg-gray-900/90 backdrop-blur-md border border-red-500/30
+                shadow-lg shadow-black/50">
+    </div>
+    <div id="redispatchCost" style="display:none;"
+         class="px-3 py-1.5 rounded-lg text-gray-300 text-xs
+                bg-gray-900/90 backdrop-blur-md border border-white/[0.08]
+                shadow-lg shadow-black/50">
+    </div>
+    <div class="flex gap-2">
+      <button id="useRedispatch"
+              class="px-4 py-2 rounded-xl text-sm font-semibold
+                     bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white
+                     shadow-lg shadow-black/50 transition-colors">
+        Redispatch
+      </button>
+      <button id="validateRedispatch" style="display:none"
+              class="px-4 py-2 rounded-xl text-sm font-semibold
+                     bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white
+                     shadow-lg shadow-black/50 transition-colors">
+        0€
+      </button>
+      <button id="cancelRedispatch" style="display:none"
+              class="px-4 py-2 rounded-xl text-sm font-semibold
+                     bg-red-600 hover:bg-red-500 active:bg-red-700 text-white
+                     shadow-lg shadow-black/50 transition-colors">
+        Cancel
+      </button>
+    </div>
+  </div>
+
+  <!-- Solved overlay — kept in DOM for updateNetwork.js compatibility, never visible in tutorial -->
+  <div id="solvedOverlay" style="display:none;" class="fixed inset-0 z-[2000]">
+    <div class="absolute inset-0 flex items-center justify-center p-4">
+      <div id="solvedCard" class="hidden">
+        <div id="solvedMessage"></div>
+        <div id="rewardMessage"></div>
+        <button id="nextLevelBtn"></button>
+        <button id="viewSolutionBtn"></button>
+      </div>
+    </div>
+  </div>
+  <div id="solvedPill" style="display:none;"></div>
+  <div id="nextLevelBtnPill" style="display:none;"></div>
+
   <!-- Tutorial hint (bottom center) -->
-  <div id="tutorialHelp" style="display:block;"
+  <div id="tutorialHelp" style="display:none;"
        class="fixed bottom-0 left-1/2 -translate-x-1/2 z-[1000]
-              px-6 py-4 rounded-t-2xl
+              px-6 py-5 rounded-t-2xl
               bg-gray-900/95 backdrop-blur-md
               border-x border-t border-white/[0.08]
               text-white text-sm
@@ -39,9 +137,31 @@
               shadow-xl shadow-black/50">
   </div>
 
+  <!-- Tooltip for disabled canvas actions -->
+  <div id="tutTooltip" style="display:none;pointer-events:none;"
+       class="fixed z-[3000] px-3 py-1.5 rounded-lg
+              bg-gray-950/95 border border-white/[0.08]
+              text-white text-xs shadow-lg shadow-black/50">
+    Follow the instructions
+  </div>
+
   <script>
-    document.getElementById('skipTutorial').addEventListener('click', () => {
-      window.location.href = '/';
+    (function() {
+      const current = document.documentElement.dataset.theme || 'dark';
+      if (current === 'light') {
+        document.getElementById('themeIconSun').style.display = 'none';
+        document.getElementById('themeIconMoon').style.display = '';
+      }
+    })();
+
+    document.getElementById('themeToggleBtn').addEventListener('click', () => {
+      const current = document.documentElement.dataset.theme || 'dark';
+      const next = current === 'dark' ? 'light' : 'dark';
+      document.documentElement.dataset.theme = next;
+      localStorage.setItem('theme', next);
+      document.getElementById('themeIconSun').style.display  = next === 'dark' ? '' : 'none';
+      document.getElementById('themeIconMoon').style.display = next === 'light' ? '' : 'none';
+      if (window._applyTheme) window._applyTheme(next);
     });
   </script>
 </body>

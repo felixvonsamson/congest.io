@@ -229,7 +229,7 @@
         }
 
         sessionStorage.setItem('player', JSON.stringify(data.player));
-        window.location.href = '/';
+        window.location.href = endpoint === 'register' ? '/tutorial.html' : '/';
       } catch (e) {
         errorEl.textContent = 'Connection error — is the server running?';
         errorEl.classList.remove('hidden');

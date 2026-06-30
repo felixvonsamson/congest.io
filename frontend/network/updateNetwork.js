@@ -197,6 +197,10 @@ export function updateNetwork(ctx, network, callbacks) {
     hideSolvedUI();
     return;
   }
+  if (window._tutorialMode) {
+    hideSolvedUI();
+    return;
+  }
   const player = JSON.parse(sessionStorage.getItem('player'));
   if (player?.is_guest) {
     checkSolutionGuest(network, player);

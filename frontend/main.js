@@ -37,14 +37,14 @@ export function load_level(level) {
   }
 
   fetch('/api/load_level', {
-    method:  'POST',
+    method: 'POST',
     headers: authHeaders(),
-    body:    JSON.stringify({ level_num: level }),
+    body: JSON.stringify({ level_num: level }),
   })
     .then(r => r.json())
     .then(data => {
       player.current_level = level;
-      sessionStorage.setItem('player',  JSON.stringify(player));
+      sessionStorage.setItem('player', JSON.stringify(player));
       sessionStorage.setItem('network', JSON.stringify(data));
       updateNetwork(ctx, data, callbacks);
       fitCamera(data);
@@ -71,11 +71,11 @@ async function loadGuestLevel(levelNum) {
   // ── Main PixiJS app ──────────────────────────────────────────
   app = new Application();
   await app.init({
-    resizeTo:        window,
+    resizeTo: window,
     backgroundColor: config.colors.background,
-    antialias:       true,
-    resolution:      window.devicePixelRatio || 1,
-    autoDensity:     true,
+    antialias: true,
+    resolution: window.devicePixelRatio || 1,
+    autoDensity: true,
   });
   document.getElementById('app').appendChild(app.canvas);
 
@@ -85,34 +85,34 @@ async function loadGuestLevel(levelNum) {
   // ── Minimap PixiJS app ───────────────────────────────────────
   minimapApp = new Application();
   await minimapApp.init({
-    width:           MINIMAP_SIZE,
-    height:          MINIMAP_SIZE,
+    width: MINIMAP_SIZE,
+    height: MINIMAP_SIZE,
     backgroundColor: config.colors.background,
-    antialias:       true,
-    resolution:      window.devicePixelRatio || 1,
-    autoDensity:     true,
+    antialias: true,
+    resolution: window.devicePixelRatio || 1,
+    autoDensity: true,
   });
   // Let CSS scale the canvas to fill the minimap div
-  minimapApp.canvas.style.width  = '100%';
+  minimapApp.canvas.style.width = '100%';
   minimapApp.canvas.style.height = '100%';
   document.getElementById('minimap').appendChild(minimapApp.canvas);
 
   const overviewWorld = new Container();
-  const viewportRect  = new Graphics();
+  const viewportRect = new Graphics();
   minimapApp.stage.addChild(overviewWorld);
   minimapApp.stage.addChild(viewportRect);   // drawn on top of overview network
 
   // ── Shared state ─────────────────────────────────────────────
   const state = {
-    mainContainer:     null,
+    mainContainer: null,
     overviewContainer: null,
-    particles:         [],
-    uiElements:        [],   // labels/switches/arrows — inverse-scaled each tick
-    overloadedGfx:     null, // pulsing alpha when lines are congested
-    minimapTransform:  null, // { scale, offsetX, offsetY } set by updateNetwork
-    animations:        [],   // active entrance/exit animations { startTime, duration, update, onDone }
-    phantoms:          [],   // phantom b-node rings currently animating out
-    prevBNodes:        {},   // { id: { x, y } } — b-nodes from last updateNetwork call
+    particles: [],
+    uiElements: [],   // labels/switches/arrows — inverse-scaled each tick
+    overloadedGfx: null, // pulsing alpha when lines are congested
+    minimapTransform: null, // { scale, offsetX, offsetY } set by updateNetwork
+    animations: [],   // active entrance/exit animations { startTime, duration, update, onDone }
+    phantoms: [],   // phantom b-node rings currently animating out
+    prevBNodes: {},   // { id: { x, y } } — b-nodes from last updateNetwork call
   };
   const settings = { mode: 'switches' };
 
@@ -128,8 +128,8 @@ async function loadGuestLevel(levelNum) {
       world.x += (targetCam.x - world.x) * 0.15;
       world.y += (targetCam.y - world.y) * 0.15;
       if (Math.abs(world.x - targetCam.x) < 0.5 && Math.abs(world.y - targetCam.y) < 0.5) {
-        world.x   = targetCam.x;
-        world.y   = targetCam.y;
+        world.x = targetCam.x;
+        world.y = targetCam.y;
         targetCam = null;
       }
     }
@@ -174,17 +174,17 @@ async function loadGuestLevel(levelNum) {
     // Minimap viewport rectangle
     if (state.minimapTransform) {
       const { scale, offsetX, offsetY } = state.minimapTransform;
-      const left   = -world.x / world.scale.x;
-      const top    = -world.y / world.scale.y;
-      const right  = (app.screen.width  - world.x) / world.scale.x;
+      const left = -world.x / world.scale.x;
+      const top = -world.y / world.scale.y;
+      const right = (app.screen.width - world.x) / world.scale.x;
       const bottom = (app.screen.height - world.y) / world.scale.y;
       viewportRect.clear();
       viewportRect
         .rect(
-          left  * scale + offsetX,
-          top   * scale + offsetY,
-          (right  - left)  * scale,
-          (bottom - top)   * scale,
+          left * scale + offsetX,
+          top * scale + offsetY,
+          (right - left) * scale,
+          (bottom - top) * scale,
         )
         .stroke({ width: 1.5, color: config.colors.viewportRect });
     }
@@ -193,14 +193,14 @@ async function loadGuestLevel(levelNum) {
   // ── Zoom (mouse wheel) ───────────────────────────────────────
   app.canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
-    const rect   = app.canvas.getBoundingClientRect();
+    const rect = app.canvas.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
     // World point under cursor before zoom
-    const wx     = (mouseX - world.x) / world.scale.x;
-    const wy     = (mouseY - world.y) / world.scale.y;
+    const wx = (mouseX - world.x) / world.scale.x;
+    const wy = (mouseY - world.y) / world.scale.y;
     const factor = Math.exp(-e.deltaY * 0.001);
-    const zoom   = Math.max(0.1, Math.min(10, world.scale.x * factor));
+    const zoom = Math.max(0.5, Math.min(10, world.scale.x * factor));
     world.scale.set(zoom);
     // Shift so the same world point stays under the cursor
     world.x = mouseX - wx * zoom;
@@ -208,12 +208,12 @@ async function loadGuestLevel(levelNum) {
   }, { passive: false });
 
   // ── Pan (pointer drag) ───────────────────────────────────────
-  let dragging  = false;
+  let dragging = false;
   let dragMoved = false;
   let dragStart = { x: 0, y: 0 };
 
   app.canvas.addEventListener('pointerdown', (e) => {
-    dragging  = true;
+    dragging = true;
     dragMoved = false;
     dragStart = { x: e.clientX - world.x, y: e.clientY - world.y };
   });
@@ -224,38 +224,38 @@ async function loadGuestLevel(levelNum) {
     // Small threshold so a plain tap doesn't micro-jitter the world
     if (!dragMoved && Math.abs(nx - world.x) < 3 && Math.abs(ny - world.y) < 3) return;
     dragMoved = true;
-    world.x   = nx;
-    world.y   = ny;
+    world.x = nx;
+    world.y = ny;
   });
-  app.canvas.addEventListener('pointerup',    () => { dragging = false; });
+  app.canvas.addEventListener('pointerup', () => { dragging = false; });
   app.canvas.addEventListener('pointerleave', () => { dragging = false; });
 
   // ── Pinch zoom (touch) ───────────────────────────────────────
-  let pinchDist0   = 0;
-  let pinchZoom0   = 1;
-  let pinchCenter  = { x: 0, y: 0 };
+  let pinchDist0 = 0;
+  let pinchZoom0 = 1;
+  let pinchCenter = { x: 0, y: 0 };
 
   app.canvas.addEventListener('touchstart', (e) => {
     if (e.touches.length !== 2) return;
     e.preventDefault();
-    const [t0, t1]  = e.touches;
-    pinchDist0       = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
-    pinchZoom0       = world.scale.x;
-    const rect       = app.canvas.getBoundingClientRect();
-    const midX       = (t0.clientX + t1.clientX) / 2 - rect.left;
-    const midY       = (t0.clientY + t1.clientY) / 2 - rect.top;
-    pinchCenter      = { x: (midX - world.x) / world.scale.x, y: (midY - world.y) / world.scale.y };
+    const [t0, t1] = e.touches;
+    pinchDist0 = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
+    pinchZoom0 = world.scale.x;
+    const rect = app.canvas.getBoundingClientRect();
+    const midX = (t0.clientX + t1.clientX) / 2 - rect.left;
+    const midY = (t0.clientY + t1.clientY) / 2 - rect.top;
+    pinchCenter = { x: (midX - world.x) / world.scale.x, y: (midY - world.y) / world.scale.y };
   }, { passive: false });
 
   app.canvas.addEventListener('touchmove', (e) => {
     if (e.touches.length !== 2) return;
     e.preventDefault();
     const [t0, t1] = e.touches;
-    const dist      = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
-    const zoom      = Math.max(0.1, Math.min(10, pinchZoom0 * dist / pinchDist0));
-    const rect      = app.canvas.getBoundingClientRect();
-    const midX      = (t0.clientX + t1.clientX) / 2 - rect.left;
-    const midY      = (t0.clientY + t1.clientY) / 2 - rect.top;
+    const dist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
+    const zoom = Math.max(0.5, Math.min(10, pinchZoom0 * dist / pinchDist0));
+    const rect = app.canvas.getBoundingClientRect();
+    const midX = (t0.clientX + t1.clientX) / 2 - rect.left;
+    const midY = (t0.clientY + t1.clientY) / 2 - rect.top;
     world.scale.set(zoom);
     world.x = midX - pinchCenter.x * zoom;
     world.y = midY - pinchCenter.y * zoom;
@@ -267,14 +267,14 @@ async function loadGuestLevel(levelNum) {
   minimapApp.canvas.addEventListener('pointerdown', (e) => {
     if (!state.minimapTransform) return;
     const { scale, offsetX, offsetY } = state.minimapTransform;
-    const rect   = minimapApp.canvas.getBoundingClientRect();
+    const rect = minimapApp.canvas.getBoundingClientRect();
     // Normalize click to internal canvas resolution (CSS may have scaled it)
     const localX = (e.clientX - rect.left) * (MINIMAP_SIZE / rect.width);
-    const localY = (e.clientY - rect.top)  * (MINIMAP_SIZE / rect.height);
+    const localY = (e.clientY - rect.top) * (MINIMAP_SIZE / rect.height);
     const worldX = (localX - offsetX) / scale;
     const worldY = (localY - offsetY) / scale;
     targetCam = {
-      x: app.screen.width  / 2 - worldX * world.scale.x,
+      x: app.screen.width / 2 - worldX * world.scale.x,
       y: app.screen.height / 2 - worldY * world.scale.y,
     };
   });
@@ -285,9 +285,9 @@ async function loadGuestLevel(levelNum) {
     if (e.key === 's' || e.key === 'S') {
       const network = JSON.parse(sessionStorage.getItem('network'));
       fetch('/api/solve', {
-        method:  'POST',
+        method: 'POST',
         headers: authHeaders(),
-        body:    JSON.stringify({ network_data: network }),
+        body: JSON.stringify({ network_data: network }),
       })
         .then(r => r.json())
         .then(data => updateNetwork(ctx, data, callbacks))
@@ -329,7 +329,7 @@ async function loadGuestLevel(levelNum) {
       let network = JSON.parse(sessionStorage.getItem('network'));
       for (const line of Object.values(network.lines)) {
         if (line.from_node === nodeId + 'b') network = toggleSwitch(network, line.id + '_from');
-        if (line.to_node   === nodeId + 'b') network = toggleSwitch(network, line.id + '_to');
+        if (line.to_node === nodeId + 'b') network = toggleSwitch(network, line.id + '_to');
       }
       network = calculatePowerFlow(network);
       updateNetwork(ctx, network, callbacks);
@@ -337,10 +337,10 @@ async function loadGuestLevel(levelNum) {
 
     onResetRedispatch(nodeId) {
       let network = JSON.parse(sessionStorage.getItem('network'));
-      const node  = network.nodes[nodeId];
-      const adj   = network.redispatch.adjustments[nodeId] || 0;
-      node.injection               -= adj;
-      network.redispatch.cost      -= adj * (adj > 0 ? node.cost_increase : -node.cost_decrease);
+      const node = network.nodes[nodeId];
+      const adj = network.redispatch.adjustments[nodeId] || 0;
+      node.injection -= adj;
+      network.redispatch.cost -= adj * (adj > 0 ? node.cost_increase : -node.cost_decrease);
       network.redispatch.unbalance -= adj;
       delete network.redispatch.adjustments[nodeId];
       syncRedispatchUI(network);
@@ -349,13 +349,13 @@ async function loadGuestLevel(levelNum) {
     },
 
     changeInjection(nodeId, direction) {
-      let network  = JSON.parse(sessionStorage.getItem('network'));
-      const delta  = direction === 'up' ? 1 : -1;
-      const node   = network.nodes[nodeId];
+      let network = JSON.parse(sessionStorage.getItem('network'));
+      const delta = direction === 'up' ? 1 : -1;
+      const node = network.nodes[nodeId];
       node.injection += delta;
       network.redispatch.adjustments[nodeId] =
         (network.redispatch.adjustments[nodeId] || 0) + delta;
-      network.redispatch.cost      = calcRedispatchCost(network);
+      network.redispatch.cost = calcRedispatchCost(network);
       network.redispatch.unbalance += delta;
       syncRedispatchUI(network);
       network = calculatePowerFlow(network);
@@ -365,8 +365,8 @@ async function loadGuestLevel(levelNum) {
 
   // ── Button wiring ────────────────────────────────────────────
   document.getElementById('nextLevelBtn').addEventListener('click', () => {
-    const btn       = document.getElementById('nextLevelBtn');
-    btn.disabled    = true;
+    const btn = document.getElementById('nextLevelBtn');
+    btn.disabled = true;
     btn.textContent = 'Loading…';
     next_level();
   });
@@ -388,8 +388,8 @@ async function loadGuestLevel(levelNum) {
   });
 
   document.getElementById('nextLevelBtnPill').addEventListener('click', () => {
-    const pill      = document.getElementById('nextLevelBtnPill');
-    pill.disabled    = true;
+    const pill = document.getElementById('nextLevelBtnPill');
+    pill.disabled = true;
     pill.textContent = 'Loading…';
     next_level();
   });
@@ -397,32 +397,32 @@ async function loadGuestLevel(levelNum) {
   document.getElementById('useRedispatch').addEventListener('click', () => {
     sessionStorage.setItem('network_before_redispatch', sessionStorage.getItem('network'));
     settings.mode = 'redispatch';
-    document.getElementById('useRedispatch').style.display      = 'none';
-    document.getElementById('redispatchCost').style.display     = 'none';
+    document.getElementById('useRedispatch').style.display = 'none';
+    document.getElementById('redispatchCost').style.display = 'none';
     document.getElementById('validateRedispatch').style.display = 'block';
-    document.getElementById('cancelRedispatch').style.display   = 'block';
+    document.getElementById('cancelRedispatch').style.display = 'block';
     updateNetwork(ctx, JSON.parse(sessionStorage.getItem('network')), callbacks);
   });
 
   document.getElementById('cancelRedispatch').addEventListener('click', () => {
     settings.mode = 'switches';
     sessionStorage.setItem('network', sessionStorage.getItem('network_before_redispatch'));
-    document.getElementById('useRedispatch').style.display      = 'block';
+    document.getElementById('useRedispatch').style.display = 'block';
     document.getElementById('validateRedispatch').style.display = 'none';
-    document.getElementById('cancelRedispatch').style.display   = 'none';
+    document.getElementById('cancelRedispatch').style.display = 'none';
     document.getElementById('redispatchUnbalance').style.display = 'none';
-    document.getElementById('redispatchUnbalance').textContent   = '';
-    document.getElementById('validateRedispatch').textContent   = '0€';
-    document.getElementById('validateRedispatch').disabled      = false;
+    document.getElementById('redispatchUnbalance').textContent = '';
+    document.getElementById('validateRedispatch').textContent = '0€';
+    document.getElementById('validateRedispatch').disabled = false;
     updateNetwork(ctx, JSON.parse(sessionStorage.getItem('network')), callbacks);
   });
 
   document.getElementById('validateRedispatch').addEventListener('click', () => {
     settings.mode = 'switches';
-    document.getElementById('useRedispatch').style.display      = 'block';
+    document.getElementById('useRedispatch').style.display = 'block';
     document.getElementById('validateRedispatch').style.display = 'none';
-    document.getElementById('cancelRedispatch').style.display   = 'none';
-    document.getElementById('validateRedispatch').textContent   = '0€';
+    document.getElementById('cancelRedispatch').style.display = 'none';
+    document.getElementById('validateRedispatch').textContent = '0€';
     updateNetwork(ctx, JSON.parse(sessionStorage.getItem('network')), callbacks);
   });
 
@@ -438,9 +438,9 @@ async function loadGuestLevel(levelNum) {
       network = await loadGuestLevel(player.current_level);
     } else {
       const response = await fetch('/api/load_level', {
-        method:  'POST',
+        method: 'POST',
         headers: authHeaders(),
-        body:    JSON.stringify({ level_num: player.current_level }),
+        body: JSON.stringify({ level_num: player.current_level }),
       });
       network = await response.json();
     }
@@ -457,23 +457,23 @@ async function loadGuestLevel(levelNum) {
 // ── Helpers (module-scope, close over app/world set in IIFE) ─────
 
 function fitCamera(network) {
-  const nodes  = Object.values(network.nodes);
-  const xs     = nodes.map(n => n.x);
-  const ys     = nodes.map(n => n.y);
-  const minX   = Math.min(...xs);
-  const maxX   = Math.max(...xs);
-  const minY   = Math.min(...ys);
-  const maxY   = Math.max(...ys);
-  const netW   = (maxX - minX) || 1;
-  const netH   = (maxY - minY) || 1;
-  const pad    = 120;
-  const zoom   = Math.min(
-    (app.screen.width  - pad * 2) / netW,
+  const nodes = Object.values(network.nodes);
+  const xs = nodes.map(n => n.x);
+  const ys = nodes.map(n => n.y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const netW = (maxX - minX) || 1;
+  const netH = (maxY - minY) || 1;
+  const pad = 120;
+  const zoom = Math.min(
+    (app.screen.width - pad * 2) / netW,
     (app.screen.height - pad * 2) / netH,
     4,
   );
   world.scale.set(zoom);
-  world.x = app.screen.width  / 2 - ((minX + maxX) / 2) * zoom;
+  world.x = app.screen.width / 2 - ((minX + maxX) / 2) * zoom;
   world.y = app.screen.height / 2 - ((minY + maxY) / 2) * zoom;
 }
 
@@ -491,16 +491,16 @@ function next_level() {
       sessionStorage.setItem('network', JSON.stringify(network));
       updateNetwork(ctx, network, callbacks);
       fitCamera(network);
-      btn.disabled    = false;
+      btn.disabled = false;
       btn.textContent = 'Next Level →';
     });
     return;
   }
 
   fetch('/api/load_level', {
-    method:  'POST',
+    method: 'POST',
     headers: authHeaders(),
-    body:    JSON.stringify({ level_num: player.current_level + 1 }),
+    body: JSON.stringify({ level_num: player.current_level + 1 }),
   })
     .then(r => r.json())
     .then(data => {
@@ -508,7 +508,7 @@ function next_level() {
       sessionStorage.setItem('player', JSON.stringify(player));
       updateNetwork(ctx, data, callbacks);
       fitCamera(data);
-      btn.disabled    = false;
+      btn.disabled = false;
       btn.textContent = 'Next Level →';
     });
 }
@@ -524,26 +524,26 @@ function calcRedispatchCost(network) {
 
 function syncRedispatchUI(network) {
   const unbalance = network.redispatch.unbalance;
-  const cost      = network.redispatch.cost;
-  const balEl     = document.getElementById('redispatchUnbalance');
-  const valBtn    = document.getElementById('validateRedispatch');
+  const cost = network.redispatch.cost;
+  const balEl = document.getElementById('redispatchUnbalance');
+  const valBtn = document.getElementById('validateRedispatch');
   balEl.style.display = unbalance !== 0 ? 'block' : 'none';
-  balEl.textContent   = unbalance !== 0 ? `Power unbalance: ${unbalance}` : '';
-  valBtn.disabled    = unbalance !== 0;
+  balEl.textContent = unbalance !== 0 ? `Power unbalance: ${unbalance}` : '';
+  valBtn.disabled = unbalance !== 0;
   valBtn.textContent = `${cost.toFixed(0)}€`;
 }
 
 function showErrorToast(html) {
-  const toast     = document.createElement('div');
+  const toast = document.createElement('div');
   toast.className = 'error-toast';
   toast.innerHTML = html;
   document.body.appendChild(toast);
   setTimeout(() => toast.remove(), 4000);
 }
 
-window._applyTheme = function(theme) {
+window._applyTheme = function (theme) {
   Object.assign(config.colors, themes[theme]);
-  if (app)        app.renderer.background.color        = config.colors.background;
+  if (app) app.renderer.background.color = config.colors.background;
   if (minimapApp) minimapApp.renderer.background.color = config.colors.background;
   const network = JSON.parse(sessionStorage.getItem('network'));
   if (network && ctx && callbacks) updateNetwork(ctx, network, callbacks);
