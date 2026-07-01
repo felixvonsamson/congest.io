@@ -249,7 +249,7 @@ def force_directed_layout(
     repulsion=2.0,  # doubled vs original to compensate for fixing the double-count
     spring=0.02,
     damping=0.85,
-    angular_spring=0.3,
+    angular_spring=0.02,
     centering=0.005,
 ):
     """
