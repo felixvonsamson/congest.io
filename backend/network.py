@@ -111,11 +111,9 @@ def generate_network(num_nodes: int = 12, width: float = 500.0, height: float = 
             len(network.nodes), len(network.lines), solution.cost,
         )
 
-    logger.error(
-        "generate_network: failed to produce a solvable level after %d attempts",
-        MAX_GENERATION_RETRIES,
+    raise RuntimeError(
+        f"generate_network: failed to produce a solvable level after {MAX_GENERATION_RETRIES} attempts"
     )
-    return network  # return best effort
 
 
 def _generate_once(num_nodes: int, width: float, height: float):
@@ -251,7 +249,7 @@ def force_directed_layout(
     repulsion=2.0,  # doubled vs original to compensate for fixing the double-count
     spring=0.02,
     damping=0.85,
-    angular_spring=0.5,
+    angular_spring=0.3,
     centering=0.005,
 ):
     """
@@ -314,9 +312,10 @@ def force_directed_layout(
             for i in range(num_neighbors):
                 neighbor_id, angle = angles[i]
                 next_neighbor_id, next_angle = angles[(i + 1) % num_neighbors]
-                gap = (next_angle - angle) % (2 * np.pi)
-                angle_diff = gap - ideal_angle
-                torque_magnitude = angular_spring * angle_diff
+                gap = max((next_angle - angle) % (2 * np.pi), 1e-3)
+                # Repulsive angular term: grows strongly as gap → 0,
+                # fades when gap exceeds ideal spacing
+                torque_magnitude = angular_spring * (1.0 / gap - 1.0 / ideal_angle)
                 vec_1 = positions[neighbor_id] - node_pos
                 vec_2 = positions[next_neighbor_id] - node_pos
                 perp_1 = np.array([-vec_1[1], vec_1[0]])
