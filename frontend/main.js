@@ -279,8 +279,55 @@ async function loadGuestLevel(levelNum) {
     };
   });
 
+  // ── Daily problem / generated network inspection ─────────────
+  // TEMP: left/right arrows browse all generated networks for visual inspection
+  const inspect = { active: false, index: 0, count: 0 };
+
+  async function loadDailyProblem() {
+    document.getElementById('menuButtons').style.display = 'none';
+    const r = await fetch('/api/daily_problem', { headers: authHeaders() });
+    const network = await r.json();
+    sessionStorage.setItem('network', JSON.stringify(network));
+    updateNetwork(ctx, network, callbacks);
+    fitCamera(network);
+    const date = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+    document.getElementById('LevelInfoPanel').textContent = `Daily Problem — ${date}`;
+
+    // Fetch count for inspection navigation
+    const cr = await fetch('/api/generated_network/count', { headers: authHeaders() });
+    const { count } = await cr.json();
+    inspect.active = true;
+    inspect.count = count;
+    // Find today's index so left/right start from the right place
+    const today = Math.floor(Date.now() / 86400000); // days since epoch
+    inspect.index = today % count;
+  }
+
+  async function loadGeneratedNetwork(index) {
+    const r = await fetch(`/api/generated_network/${index}`, { headers: authHeaders() });
+    const network = await r.json();
+    sessionStorage.setItem('network', JSON.stringify(network));
+    updateNetwork(ctx, network, callbacks);
+    fitCamera(network);
+    document.getElementById('LevelInfoPanel').textContent = `Generated Network #${index + 1} / ${inspect.count}`;
+  }
+
+  document.getElementById('dailyProblemBtn').addEventListener('click', loadDailyProblem);
+
   // ── Keyboard shortcuts ───────────────────────────────────────
   window.addEventListener('keydown', (e) => {
+    // TEMP: Left/right arrows — inspect generated networks
+    if (inspect.active && e.key === 'ArrowLeft') {
+      inspect.index = (inspect.index - 1 + inspect.count) % inspect.count;
+      loadGeneratedNetwork(inspect.index);
+      return;
+    }
+    if (inspect.active && e.key === 'ArrowRight') {
+      inspect.index = (inspect.index + 1) % inspect.count;
+      loadGeneratedNetwork(inspect.index);
+      return;
+    }
+
     // S — auto-solve
     if (e.key === 's' || e.key === 'S') {
       const network = JSON.parse(sessionStorage.getItem('network'));

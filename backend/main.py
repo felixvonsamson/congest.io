@@ -1,5 +1,8 @@
 from copy import deepcopy
 import math
+import json
+import datetime
+from pathlib import Path
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
@@ -240,6 +243,36 @@ def load_level_endpoint(
 
     return network
 
+
+def _generated_network_files():
+    return sorted(Path("generated_networks").glob("network_*.json"))
+
+
+@router.get("/daily_problem")
+def daily_problem(player: Player = Depends(get_current_player)):
+    files = _generated_network_files()
+    if not files:
+        raise HTTPException(status_code=404, detail="No generated networks available")
+    today = datetime.date.today().toordinal()
+    chosen = files[today % len(files)]
+    with open(chosen) as f:
+        data = json.load(f)
+    return dict_to_network_state(data)
+
+
+@router.get("/generated_network/count")
+def generated_network_count(player: Player = Depends(get_current_player)):
+    return {"count": len(_generated_network_files())}
+
+
+@router.get("/generated_network/{index}")
+def get_generated_network(index: int, player: Player = Depends(get_current_player)):
+    files = _generated_network_files()
+    if not files:
+        raise HTTPException(status_code=404, detail="No generated networks available")
+    with open(files[index % len(files)]) as f:
+        data = json.load(f)
+    return dict_to_network_state(data)
 
 
 app.include_router(router)
