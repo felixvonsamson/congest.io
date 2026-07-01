@@ -73,12 +73,6 @@ export function updateNetwork(ctx, network, callbacks) {
 
   sessionStorage.setItem('network', JSON.stringify(network));
 
-  // Persist daily progress across navigation so the player can return to it
-  if (window._dailyMode) {
-    const today = new Date().toISOString().slice(0, 10);
-    localStorage.setItem(`daily_network_${today}`, JSON.stringify(network));
-  }
-
   // ── Tear down old scene objects ────────────────────────────────
   if (state.mainContainer) {
     world.removeChild(state.mainContainer);

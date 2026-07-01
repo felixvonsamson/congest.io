@@ -305,13 +305,6 @@ async function loadGuestLevel(levelNum) {
     window._solvedExploring = false;
     document.getElementById('solvedPill').style.display = 'none';
 
-    // Restore saved progress for today if the player navigated away mid-solve
-    if (!already_solved) {
-      const today = new Date().toISOString().slice(0, 10);
-      const saved = localStorage.getItem(`daily_network_${today}`);
-      if (saved) network = JSON.parse(saved);
-    }
-
     sessionStorage.setItem('network', JSON.stringify(network));
     updateNetwork(ctx, network, callbacks);
     fitCamera(network);
