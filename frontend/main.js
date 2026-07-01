@@ -281,8 +281,6 @@ async function loadGuestLevel(levelNum) {
   });
 
   // ── Daily problem ─────────────────────────────────────────────
-  // TEMP: left/right arrows browse all generated networks for visual inspection
-  const inspect = { active: false, index: 0, count: 0 };
 
   function updateDailyBadge(solved) {
     document.getElementById('dailyNewPill').style.display = solved ? 'none' : '';
@@ -307,6 +305,13 @@ async function loadGuestLevel(levelNum) {
     window._solvedExploring = false;
     document.getElementById('solvedPill').style.display = 'none';
 
+    // Restore saved progress for today if the player navigated away mid-solve
+    if (!already_solved) {
+      const today = new Date().toISOString().slice(0, 10);
+      const saved = localStorage.getItem(`daily_network_${today}`);
+      if (saved) network = JSON.parse(saved);
+    }
+
     sessionStorage.setItem('network', JSON.stringify(network));
     updateNetwork(ctx, network, callbacks);
     fitCamera(network);
@@ -314,23 +319,6 @@ async function loadGuestLevel(levelNum) {
     document.getElementById('LevelInfoPanel').textContent = `Daily Problem — ${date}`;
     updateDailyBadge(already_solved);
 
-    // Fetch count for temp inspection navigation
-    const cr = await fetch('/api/generated_network/count', { headers: authHeaders() });
-    const { count } = await cr.json();
-    inspect.active = true;
-    inspect.count = count;
-    const today = Math.floor(Date.now() / 86400000);
-    inspect.index = today % count;
-  }
-
-  async function loadGeneratedNetwork(index) {
-    const r = await fetch(`/api/generated_network/${index}`, { headers: authHeaders() });
-    const network = await r.json();
-    window._dailyMode = false;
-    sessionStorage.setItem('network', JSON.stringify(network));
-    updateNetwork(ctx, network, callbacks);
-    fitCamera(network);
-    document.getElementById('LevelInfoPanel').textContent = `Generated Network #${index + 1} / ${inspect.count}`;
   }
 
   document.getElementById('dailyProblemBtn').addEventListener('click', loadDailyProblem);
@@ -362,18 +350,6 @@ async function loadGuestLevel(levelNum) {
 
   // ── Keyboard shortcuts ───────────────────────────────────────
   window.addEventListener('keydown', (e) => {
-    // TEMP: Left/right arrows — inspect generated networks
-    if (inspect.active && e.key === 'ArrowLeft') {
-      inspect.index = (inspect.index - 1 + inspect.count) % inspect.count;
-      loadGeneratedNetwork(inspect.index);
-      return;
-    }
-    if (inspect.active && e.key === 'ArrowRight') {
-      inspect.index = (inspect.index + 1) % inspect.count;
-      loadGeneratedNetwork(inspect.index);
-      return;
-    }
-
     // S — auto-solve
     if (e.key === 's' || e.key === 'S') {
       const network = JSON.parse(sessionStorage.getItem('network'));
