@@ -41,7 +41,7 @@ DEFAULT_LINE_LIMIT = 50.0
 MAX_SOLVER_ITERATIONS = 250
 
 # Hard wall-clock timeout for the solver (seconds).
-SOLVER_TIMEOUT_SECONDS = 30
+SOLVER_TIMEOUT_SECONDS = 10
 
 # Maximum retries when generate_network fails to produce a solvable level.
 MAX_GENERATION_RETRIES = 10
@@ -246,14 +246,14 @@ def force_directed_layout(
     network,
     k=50.0,
     iterations=50,
-    repulsion=1000.0,
+    repulsion=1.0,
     spring=0.02,
     damping=0.85,
-    centering=0.005,
+    angular_spring=0.5,
 ):
     """
-    Force-directed layout. Nodes repel each other, edges act as springs,
-    a weak centering force pulls all nodes toward the centroid.
+    Simple force-directed layout algorithm to adjust node positions.
+    Nodes repel each other, edges act as springs.
     """
     nodes = network.nodes
     lines = network.lines
@@ -261,27 +261,18 @@ def force_directed_layout(
         node.id: np.array([node.x, node.y], dtype=float) for node in nodes.values()
     }
     velocities = {node.id: np.array([0.0, 0.0], dtype=float) for node in nodes.values()}
-    node_ids = list(nodes.keys())
-
-    # Build adjacency once — it never changes during layout
-    adjacency = {node.id: [] for node in nodes.values()}
-    for line in lines.values():
-        adjacency[line.from_node].append(line.to_node)
-        adjacency[line.to_node].append(line.from_node)
 
     for _ in range(iterations):
         forces = {node.id: np.array([0.0, 0.0], dtype=float) for node in nodes.values()}
 
-        # Repulsion — iterate each pair once (i < j) to avoid double-counting
-        for idx_a in range(len(node_ids)):
-            for idx_b in range(idx_a + 1, len(node_ids)):
-                id_a, id_b = node_ids[idx_a], node_ids[idx_b]
-                delta = positions[id_a] - positions[id_b]
-                dist = np.linalg.norm(delta) + 1e-6
-                force_magnitude = repulsion / (dist**2)
-                force = (delta / dist) * force_magnitude
-                forces[id_a] += force
-                forces[id_b] -= force
+        # Repulsion
+        for i, node_a in nodes.items():
+            for j, node_b in nodes.items():
+                if i != j:
+                    delta = positions[node_a.id] - positions[node_b.id]
+                    dist = np.linalg.norm(delta) + 1e-6
+                    force_magnitude = repulsion / (dist**2)
+                    forces[node_a.id] += (delta / dist) * force_magnitude
 
         # Spring forces
         for line in lines.values():
@@ -294,16 +285,45 @@ def force_directed_layout(
             forces[line.from_node] += force
             forces[line.to_node] -= force
 
-        # Weak centering force toward centroid
-        centroid = np.mean(list(positions.values()), axis=0)
-        for node_id in node_ids:
-            forces[node_id] += centering * (centroid - positions[node_id])
+        # Angular springs
+        adjacency = {node.id: [] for node in nodes.values()}
+        for line in lines.values():
+            adjacency[line.from_node].append(line.to_node)
+            adjacency[line.to_node].append(line.from_node)
+        for node_id in adjacency:
+            neighbors = adjacency[node_id]
+            num_neighbors = len(neighbors)
+            node_pos = positions[node_id]
+            angles = []
+            for neighbor_id in neighbors:
+                vec = positions[neighbor_id] - node_pos
+                angle = np.arctan2(vec[1], vec[0])
+                angles.append((neighbor_id, angle))
+            angles.sort(key=lambda x: x[1])
+            ideal_angle = 2 * np.pi / num_neighbors
+            for i in range(num_neighbors):
+                neighbor_id, angle = angles[i]
+                next_neighbor_id, next_angle = angles[(i + 1) % num_neighbors]
+                gap = (next_angle - angle) % (2 * np.pi)
+                angle_diff = gap - ideal_angle
+                torque_magnitude = angular_spring * angle_diff
+                vec_1 = positions[neighbor_id] - node_pos
+                vec_2 = positions[next_neighbor_id] - node_pos
+                # Apply torque as forces perpendicular to the vectors
+                perp_1 = np.array([-vec_1[1], vec_1[0]])
+                perp_2 = np.array([vec_2[1], -vec_2[0]])
+                perp_1 /= np.linalg.norm(perp_1) + 1e-6
+                perp_2 /= np.linalg.norm(perp_2) + 1e-6
+                forces[neighbor_id] += perp_1 * torque_magnitude
+                forces[next_neighbor_id] += perp_2 * torque_magnitude
+                forces[node_id] -= (perp_1 + perp_2) * torque_magnitude
 
         # Update velocities and positions
         for node in nodes.values():
             velocities[node.id] = (velocities[node.id] + forces[node.id]) * damping
             positions[node.id] += velocities[node.id]
 
+    # Update node positions
     for node in nodes.values():
         node.x, node.y = positions[node.id].tolist()
 
