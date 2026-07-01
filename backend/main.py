@@ -9,6 +9,8 @@ from .network import (
     update_network,
     solve_network,
     load_level,
+    reset_all_switches,
+    validate_network,
 )
 from .schemas import (
     ProgressUpdateRequest,
@@ -133,10 +135,30 @@ def check_solution(
     db: Session = Depends(get_db),
 ):
     """
-    Checking players solution and rewarding him if he solved a new level
+    Check a player's solution and reward them if they solved a new level.
+    Validates that the submitted topology is a legal derivative of the original level
+    (same base nodes and injections, only switch moves applied).
     """
-    #TDOO: Check that network is valid
     network = dict_to_network_state(data.network_data)
+
+    try:
+        validate_network(network)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    if network.level is None:
+        raise HTTPException(status_code=400, detail="Network has no level set")
+
+    # Verify the topology is a legal derivative of the original level
+    original = load_level(network.level)
+    submitted_reset = reset_all_switches(deepcopy(network))
+    original_nodes = {nid: (n.injection, n.x, n.y) for nid, n in original.nodes.items()}
+    submitted_nodes = {nid: (n.injection, n.x, n.y) for nid, n in submitted_reset.nodes.items()}
+    original_lines = set(original.lines.keys())
+    submitted_lines = set(submitted_reset.lines.keys())
+    if original_nodes != submitted_nodes or original_lines != submitted_lines:
+        raise HTTPException(status_code=400, detail="Submitted network does not match original level")
+
     network = calculate_power_flow(network)
 
     all_lines_within_capacity = all(
@@ -167,8 +189,15 @@ def check_solution(
 
 
 @router.post("/solve")
-def solve_net(data: NetworkStateRequest):
+def solve_net(
+    data: NetworkStateRequest,
+    player: Player = Depends(get_current_player),
+):
     network = dict_to_network_state(data.network_data)
+    try:
+        validate_network(network)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     network = solve_network(network)
     return network
 

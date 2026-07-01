@@ -1,5 +1,7 @@
 import math
 import random
+import time
+import logging
 from .schemas import (
     NetworkState,
     TopologyChangeRequest,
@@ -11,14 +13,113 @@ import numpy as np
 import heapq
 import json
 from copy import deepcopy
+from collections import deque
+from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+# --- Generator / solver constants ---
+
+# Flow target when scaling injections: max flow will be set to this % of DEFAULT_LINE_LIMIT.
+# Must be > DEFAULT_LINE_LIMIT to guarantee at least one overloaded line.
+SCALING_TARGET = 54
+
+# Minimum max-flow before scaling is considered meaningful. Below this the
+# scaling factor becomes extreme (> 1.8×) and produces unrealistic injections.
+MIN_MAX_FLOW_BEFORE_SCALING = 30
+
+# Fraction of edges kept after pruning the Delaunay triangulation.
+EDGE_REDUCTION_FACTOR = 0.85
+
+# Fraction of highest-degree nodes whose edges are never pruned.
+HIGH_DEGREE_NODE_FACTOR = 0.1
+
+# Capacity limit assigned to every line (MW).
+DEFAULT_LINE_LIMIT = 50.0
+
+# Maximum solver iterations before giving up and returning best found so far.
+MAX_SOLVER_ITERATIONS = 250
+
+# Hard wall-clock timeout for the solver (seconds).
+SOLVER_TIMEOUT_SECONDS = 30
+
+# Maximum retries when generate_network fails to produce a solvable level.
+MAX_GENERATION_RETRIES = 10
 
 
-def generate_network(num_nodes: int = 12, width: float = 500.0, height: float = 500.0):
+def validate_network(network: NetworkState):
+    """Raise ValueError if any line references a node that does not exist."""
+    for line in network.lines.values():
+        if line.from_node not in network.nodes:
+            raise ValueError(
+                f"Line {line.id} references unknown from_node '{line.from_node}'"
+            )
+        if line.to_node not in network.nodes:
+            raise ValueError(
+                f"Line {line.id} references unknown to_node '{line.to_node}'"
+            )
+
+
+def is_connected(network: NetworkState) -> bool:
+    """BFS connectivity check — O(n + m), much cheaper than matrix rank."""
+    if not network.nodes:
+        return True
+    adjacency = {node_id: [] for node_id in network.nodes}
+    for line in network.lines.values():
+        adjacency[line.from_node].append(line.to_node)
+        adjacency[line.to_node].append(line.from_node)
+
+    start = next(iter(network.nodes))
+    visited = {start}
+    queue = deque([start])
+    while queue:
+        node_id = queue.popleft()
+        for neighbor in adjacency[node_id]:
+            if neighbor not in visited:
+                visited.add(neighbor)
+                queue.append(neighbor)
+    return len(visited) == len(network.nodes)
+
+
+def generate_network(num_nodes: int = 12, width: float = 500.0, height: float = 500.0, seed: int | None = None):
     """
     Generate a planar graph with nodes positioned in 2D space.
     Each node will have at least degree 3. Edges are created using
-    Delaunay triangulation for planarity, then pruned if necessary.
+    Delaunay triangulation for initial connectivity, then pruned.
+
+    Retries up to MAX_GENERATION_RETRIES times until a solvable level is found.
     """
+    import random
+    import math
+    from scipy.spatial import Delaunay
+
+    if seed is not None:
+        random.seed(seed)
+        np.random.seed(seed)
+
+    for attempt in range(MAX_GENERATION_RETRIES):
+        network = _generate_once(num_nodes, width, height)
+        if network is None:
+            continue
+        solution = solve_network(deepcopy(network))
+        if solution.cost == 0.0:
+            return network
+        logger.warning(
+            "generate_network: unsolvable level on attempt %d/%d "
+            "(nodes=%d, lines=%d, cost=%.2f) — retrying",
+            attempt + 1, MAX_GENERATION_RETRIES,
+            len(network.nodes), len(network.lines), solution.cost,
+        )
+
+    logger.error(
+        "generate_network: failed to produce a solvable level after %d attempts",
+        MAX_GENERATION_RETRIES,
+    )
+    return network  # return best effort
+
+
+def _generate_once(num_nodes: int, width: float, height: float):
+    """Single generation attempt. Returns a NetworkState or None if degenerate."""
     import random
     import math
     from scipy.spatial import Delaunay
@@ -28,7 +129,7 @@ def generate_network(num_nodes: int = 12, width: float = 500.0, height: float = 
         (random.random() * width, random.random() * height) for _ in range(num_nodes)
     ]
 
-    # 2. Delaunay triangulation (guarantees planarity)
+    # 2. Delaunay triangulation for initial connectivity
     tri = Delaunay(points)
     edges = set()
     for simplex in tri.simplices:
@@ -46,7 +147,6 @@ def generate_network(num_nodes: int = 12, width: float = 500.0, height: float = 
     # Ensure each node has degree >= 3 by adding nearest neighbors if needed
     for i in range(num_nodes):
         if len(adjacency[i]) < 3:
-            # sort other nodes by distance
             dists = sorted(
                 [
                     (j, math.dist(points[i], points[j]))
@@ -63,25 +163,22 @@ def generate_network(num_nodes: int = 12, width: float = 500.0, height: float = 
                     break
 
     # Assign random injections to nodes
-    nodes = {}
     raw = [random.uniform(-100, 100) for _ in range(len(points))]
 
-    # Sum positive (generation) and negative (consumption magnitude)
     pos_sum = sum(x for x in raw if x > 0)
     neg_sum = -sum(x for x in raw if x < 0)
 
-    # If one side is larger, scale values on that side down so total generation == total consumption
     if pos_sum > neg_sum and pos_sum > 0:
         scale = neg_sum / pos_sum if pos_sum > 0 else 0.0
         raw = [x * scale if x > 0 else x for x in raw]
     elif neg_sum > pos_sum and neg_sum > 0:
         scale = pos_sum / neg_sum if neg_sum > 0 else 0.0
         raw = [x * scale if x < 0 else x for x in raw]
-    # if both are zero or already balanced, leave raw as-is
+
+    nodes = {}
     for i, (x, y) in enumerate(points):
         nodes[str(i)] = Node(id=str(i), x=x, y=y, injection=raw[i])
 
-    # Convert edges
     lines = {}
     for u in adjacency:
         for v in adjacency[u]:
@@ -91,29 +188,31 @@ def generate_network(num_nodes: int = 12, width: float = 500.0, height: float = 
                     from_node=str(u),
                     to_node=str(v),
                     flow=0.0,
-                    limit=50.0,
+                    limit=DEFAULT_LINE_LIMIT,
                 )
 
-    # Convert to Pydantic classes
     network = NetworkState(nodes=nodes, lines=lines)
     network = reduce_edges(network)
     network = force_directed_layout(network, k=150.0)
 
     state = calculate_power_flow(network)
     if state.cost == 0.0:
-        # find the highest flow
         max_flow = max(abs(line.flow) for line in state.lines.values())
-        # scale all injections up so that the highest flow is at 110% of the limit
-        scale = 54 / max_flow if max_flow > 0 else 1.0
+        if max_flow < MIN_MAX_FLOW_BEFORE_SCALING:
+            # Degenerate: scaling would be too extreme, discard this attempt
+            return None
+        scale = SCALING_TARGET / max_flow
         for node in network.nodes.values():
             node.injection *= scale
         state = calculate_power_flow(network)
     return state
 
 
-def reduce_edges(network, factor=0.85, high_degree_node_factor=0.1):
+def reduce_edges(network, factor=EDGE_REDUCTION_FACTOR, high_degree_node_factor=HIGH_DEGREE_NODE_FACTOR):
     """
-    Reduces the number of edges in the network by the given factor while maintaining connectivity.
+    Reduces the number of edges in the network while maintaining connectivity.
+    Edges belonging to the top HIGH_DEGREE_NODE_FACTOR fraction of nodes are
+    never removed. Mutates network.lines in place.
     """
     nodes = network.nodes
     lines = network.lines
@@ -121,14 +220,12 @@ def reduce_edges(network, factor=0.85, high_degree_node_factor=0.1):
     for line in lines.values():
         node_degree[line.from_node] += 1
         node_degree[line.to_node] += 1
-    # list of highest degree nodes to keep all edges for
-    high_degree_nodes = []
+
     sorted_node_degree = sorted(node_degree.items(), key=lambda x: x[1], reverse=True)
-    for i in range(math.floor(len(nodes) * high_degree_node_factor)):
-        high_degree_nodes.append(sorted_node_degree[i][0])
-    # keep the top high_degree_nodes fraction with all edges and remove the (1-factor) edges from the rest
-    # of the nodes going from highest to lowest degree until we reach the target number of edges or until all other nodes
-    # have degree 3. An edge can only be removed if both its nodes have degree > 3.
+    high_degree_nodes = {
+        nid for nid, _ in sorted_node_degree[: math.floor(len(nodes) * high_degree_node_factor)]
+    }
+
     target_num_edges = math.floor(len(lines) * factor)
     shuffled_lines = list(lines.values())
     random.shuffle(shuffled_lines)
@@ -151,14 +248,15 @@ def force_directed_layout(
     network,
     k=50.0,
     iterations=50,
-    repulsion=1.0,
+    repulsion=2.0,  # doubled vs original to compensate for fixing the double-count
     spring=0.02,
     damping=0.85,
     angular_spring=0.5,
+    centering=0.005,
 ):
     """
-    Simple force-directed layout algorithm to adjust node positions.
-    Nodes repel each other, edges act as springs.
+    Force-directed layout. Nodes repel each other, edges act as springs,
+    a weak centering force pulls all nodes toward the centroid.
     """
     nodes = network.nodes
     lines = network.lines
@@ -166,18 +264,27 @@ def force_directed_layout(
         node.id: np.array([node.x, node.y], dtype=float) for node in nodes.values()
     }
     velocities = {node.id: np.array([0.0, 0.0], dtype=float) for node in nodes.values()}
+    node_ids = list(nodes.keys())
+
+    # Build adjacency once — it never changes during layout
+    adjacency = {node.id: [] for node in nodes.values()}
+    for line in lines.values():
+        adjacency[line.from_node].append(line.to_node)
+        adjacency[line.to_node].append(line.from_node)
 
     for _ in range(iterations):
         forces = {node.id: np.array([0.0, 0.0], dtype=float) for node in nodes.values()}
 
-        # Repulsion
-        for i, node_a in nodes.items():
-            for j, node_b in nodes.items():
-                if i != j:
-                    delta = positions[node_a.id] - positions[node_b.id]
-                    dist = np.linalg.norm(delta) + 1e-6
-                    force_magnitude = repulsion / (dist**2)
-                    forces[node_a.id] += (delta / dist) * force_magnitude
+        # Repulsion — iterate each pair once (i < j) to avoid double-counting
+        for idx_a in range(len(node_ids)):
+            for idx_b in range(idx_a + 1, len(node_ids)):
+                id_a, id_b = node_ids[idx_a], node_ids[idx_b]
+                delta = positions[id_a] - positions[id_b]
+                dist = np.linalg.norm(delta) + 1e-6
+                force_magnitude = repulsion / (dist**2)
+                force = (delta / dist) * force_magnitude
+                forces[id_a] += force
+                forces[id_b] -= force
 
         # Spring forces
         for line in lines.values():
@@ -190,14 +297,12 @@ def force_directed_layout(
             forces[line.from_node] += force
             forces[line.to_node] -= force
 
-        # angular springs
-        adjacency = {node.id: [] for node in nodes.values()}
-        for line in lines.values():
-            adjacency[line.from_node].append(line.to_node)
-            adjacency[line.to_node].append(line.from_node)
+        # Angular springs
         for node_id in adjacency:
             neighbors = adjacency[node_id]
             num_neighbors = len(neighbors)
+            if num_neighbors < 2:
+                continue
             node_pos = positions[node_id]
             angles = []
             for neighbor_id in neighbors:
@@ -214,7 +319,6 @@ def force_directed_layout(
                 torque_magnitude = angular_spring * angle_diff
                 vec_1 = positions[neighbor_id] - node_pos
                 vec_2 = positions[next_neighbor_id] - node_pos
-                # Apply torque as forces perpendicular to the vectors
                 perp_1 = np.array([-vec_1[1], vec_1[0]])
                 perp_2 = np.array([vec_2[1], -vec_2[0]])
                 perp_1 /= np.linalg.norm(perp_1) + 1e-6
@@ -223,12 +327,16 @@ def force_directed_layout(
                 forces[next_neighbor_id] += perp_2 * torque_magnitude
                 forces[node_id] -= (perp_1 + perp_2) * torque_magnitude
 
+        # Weak centering force toward centroid
+        centroid = np.mean(list(positions.values()), axis=0)
+        for node_id in node_ids:
+            forces[node_id] += centering * (centroid - positions[node_id])
+
         # Update velocities and positions
         for node in nodes.values():
             velocities[node.id] = (velocities[node.id] + forces[node.id]) * damping
             positions[node.id] += velocities[node.id]
 
-    # Update node positions
     for node in nodes.values():
         node.x, node.y = positions[node.id].tolist()
 
@@ -237,7 +345,7 @@ def force_directed_layout(
 
 def calculate_power_flow(network):
     """
-    Simple DC power flow using Kirchhoff laws.
+    DC power flow using Kirchhoff laws.
     Steps:
     - map node ids to indices
     - build incidence matrix A
@@ -245,21 +353,18 @@ def calculate_power_flow(network):
     - solve B * theta = p
     - compute flows on lines
     """
+    validate_network(network)
 
     nodes = network.nodes
     lines = network.lines
     n = len(nodes)
 
-    # --- Map node IDs to indices ---
     id_to_idx = {node.id: i for i, node in enumerate(nodes.values())}
 
-    # --- Build injection vector p ---
     p = np.array([node.injection for node in nodes.values()], dtype=float)
 
-    # --- Build line data ---
-    # assume reactance X = 1.0 for now
     m = len(lines)
-    A = np.zeros((n, m))  # incidence matrix
+    A = np.zeros((n, m))
 
     for ell, line in enumerate(lines.values()):
         i = id_to_idx[line.from_node]
@@ -267,18 +372,15 @@ def calculate_power_flow(network):
         A[i, ell] = 1
         A[j, ell] = -1
 
-    # Check if the network is fully connected
-    if np.linalg.matrix_rank(A) < n - 1:
+    # BFS connectivity check — cheaper than matrix rank
+    if not is_connected(network):
         return NetworkState(nodes=nodes, lines=lines, cost=float("nan"), level=network.level)
 
-    # --- Build B = A * A^T (since X = 1) ---
     B = A @ A.T
 
-    # Slack bus: remove row and column 0
     B_red = B[1:, 1:]
     p_red = p[1:]
 
-    # Solve for angles (theta)
     try:
         theta_red = np.linalg.solve(B_red, p_red)
     except np.linalg.LinAlgError:
@@ -287,10 +389,8 @@ def calculate_power_flow(network):
     theta = np.zeros(n)
     theta[1:] = theta_red
 
-    # --- Compute line flows f = A^T * theta ---
     flows = A.T @ theta
 
-    # --- Attach flows back to lines ---
     updated_lines = {}
     for ell, line in enumerate(lines.values()):
         updated_lines[line.id] = Line(
@@ -301,7 +401,6 @@ def calculate_power_flow(network):
             limit=line.limit,
         )
 
-    # Calculate cost as the sum overloads
     network.cost = sum(
         max(0.0, abs(updated_lines[line.id].flow) - line.limit)
         for line in lines.values()
@@ -319,9 +418,7 @@ def update_network(network, req: TopologyChangeRequest):
         target_node_id = req.line_id.split("-")[1]
         from_node_id = req.line_id.split("-")[0][1:]
         if "b" in target_node_id:
-            # switching back to original node
             new_node = network.nodes[target_node_id[:-1]]
-            # delete "b" node if no other lines are connected
             connected_lines = [
                 line
                 for line in network.lines.values()
@@ -331,7 +428,6 @@ def update_network(network, req: TopologyChangeRequest):
                 del network.nodes[target_node_id]
         else:
             if not network.nodes.get(target_node_id + "b"):
-                # create a new "b" node
                 new_node = Node(
                     id=target_node_id + "b",
                     injection=0.0,
@@ -354,9 +450,7 @@ def update_network(network, req: TopologyChangeRequest):
         target_node_id = req.line_id.split("-")[0][1:]
         to_node_id = req.line_id.split("-")[1]
         if "b" in target_node_id:
-            # switching back to original node
             new_node = network.nodes[target_node_id[:-1]]
-            # delete "b" node if no other lines are connected
             connected_lines = [
                 line
                 for line in network.lines.values()
@@ -366,7 +460,6 @@ def update_network(network, req: TopologyChangeRequest):
                 del network.nodes[target_node_id]
         else:
             if not network.nodes.get(target_node_id + "b"):
-                # create a new "b" node
                 new_node = Node(
                     id=target_node_id + "b",
                     injection=0.0,
@@ -388,69 +481,107 @@ def update_network(network, req: TopologyChangeRequest):
     return network
 
 
+def _get_node_switch_states(network, node_id):
+    """
+    Enumerate all switch combinations for lines incident to node_id.
+    Each incident non-b line endpoint can be toggled independently.
+    Yields (config_frozenset, new_network) for each combination.
+    """
+    incident_lines = [
+        line for line in network.lines.values()
+        if (line.from_node == node_id and not line.from_node.endswith("b"))
+        or (line.to_node == node_id and not line.to_node.endswith("b"))
+    ]
+    if not incident_lines:
+        return
+
+    # Build (line_id, direction) pairs that can be switched
+    switchable = []
+    for line in incident_lines:
+        if line.to_node == node_id and not line.to_node.endswith("b"):
+            switchable.append((line.id, "to"))
+        if line.from_node == node_id and not line.from_node.endswith("b"):
+            switchable.append((line.id, "from"))
+
+    # Enumerate all non-empty subsets of switches to toggle
+    num = len(switchable)
+    for mask in range(1, 1 << num):
+        candidate = deepcopy(network)
+        for bit in range(num):
+            if mask & (1 << bit):
+                line_id, direction = switchable[bit]
+                # line_id may have changed if a previous toggle renamed it
+                # find the current line with matching base id
+                req = TopologyChangeRequest(line_id=line_id, direction=direction)
+                try:
+                    candidate = update_network(candidate, req)
+                except (KeyError, Exception):
+                    break
+        else:
+            yield frozenset(candidate.lines.keys()), candidate
+
+
 def solve_network(network):
     """
-    Try to find a solution that respects line limits by switching nodes.
+    Find a solution that respects line limits by switching nodes.
 
-    This algorythm starts by switching each switch and looks at the resulting
-    power flow. A cost is defined by the sum of the squared overloads on each line.
-    Each network state is then sorted by cost. It then takes the best network state
-    and tries switching each remaining switch again, storing the new network states
-    and their costs. Then the states are sorted again and the process repeats until
-    a solved network is found or until the maximum number of iterations is reached.
+    Uses best-first search over topology configurations. Each iteration pops
+    the lowest-cost state and expands it by enumerating all switch combinations
+    per node (exhaustive within each node), then pushes the best result per node.
+    This handles cases where an intermediate high-cost state (e.g. a half-open
+    bypass) is required to reach a low-cost solution.
+
+    Cost is the sum of overloads (linear) across all lines.
     """
-    max_iterations = 250
-    network_states = []
-    previous_states = []
-    heapq.heappush(network_states, calculate_power_flow(network))
+    # line IDs encode topology; frozenset is sufficient for deduplication
     visited_configs = set()
-    for iteration in range(max_iterations):
+    best_so_far = calculate_power_flow(deepcopy(network))
+    initial_config = frozenset(best_so_far.lines.keys())
+    visited_configs.add(initial_config)
+
+    network_states = []
+    heapq.heappush(network_states, best_so_far)
+
+    deadline = time.time() + SOLVER_TIMEOUT_SECONDS
+
+    for iteration in range(MAX_SOLVER_ITERATIONS):
+        if not network_states:
+            break
+        if time.time() > deadline:
+            break
+
         net = heapq.heappop(network_states)
-        previous_states.append(net)
+
+        if net.cost < best_so_far.cost:
+            best_so_far = net
+
         if net.cost == 0.0:
             return net
-        print(f"Solving iteration {iteration + 1}/{max_iterations}")
-        # generate new states by switching each switch
-        for line in list(net.lines.values()):
-            # there are two switches per line, one "to" and one "from"
-            from_node = net.nodes[line.from_node]
-            to_node = net.nodes[line.to_node]
-            if not to_node.id.endswith("b"):
-                # switch "to"
-                req_to = TopologyChangeRequest(
-                    line_id=line.id,
-                    direction="to",
-                )
-                new_net_to = update_network(deepcopy(net), req_to)
-                config_to = frozenset(new_net_to.lines.keys())
-                if config_to not in visited_configs:
-                    visited_configs.add(config_to)
-                    new_state_to = calculate_power_flow(new_net_to)
-                    if not math.isnan(new_state_to.cost):
-                        heapq.heappush(network_states, new_state_to)
-            if not from_node.id.endswith("b"):
-                # switch "from"
-                req_from = TopologyChangeRequest(
-                    line_id=line.id,
-                    direction="from",
-                )
-                new_net_from = update_network(deepcopy(net), req_from)
-                config_from = frozenset(new_net_from.lines.keys())
-                if config_from not in visited_configs:
-                    visited_configs.add(config_from)
-                    new_state_from = calculate_power_flow(new_net_from)
-                    if not math.isnan(new_state_from.cost):
-                        heapq.heappush(network_states, new_state_from)
 
-        print("number of tested states :", len(network_states))
-    # return the best state found so far
-    best_state = min(previous_states + network_states, key=lambda x: x.cost)
-    return best_state
+        # Expand by node: enumerate all switch combos per node, push best per node
+        node_ids = [nid for nid in net.nodes if not nid.endswith("b")]
+        for node_id in node_ids:
+            best_for_node = None
+            for config, candidate in _get_node_switch_states(net, node_id):
+                if config in visited_configs:
+                    continue
+                visited_configs.add(config)
+                new_state = calculate_power_flow(candidate)
+                if math.isnan(new_state.cost):
+                    continue
+                if best_for_node is None or new_state.cost < best_for_node.cost:
+                    best_for_node = new_state
+            if best_for_node is not None:
+                heapq.heappush(network_states, best_for_node)
+
+    return best_so_far
 
 
 def load_level(level: int):
-    if level < 1 or level > 37:
-        raise ValueError("Level must be between 1 and 37")
+    level_files = list(Path("levels").glob("Level*.json"))
+    max_level = len(level_files)
+    if level < 1 or level > max_level:
+        raise ValueError(f"Level must be between 1 and {max_level}")
     file_path = f"levels/Level{level}.json"
     network = update_network_from_file(file_path)
     network = reset_all_switches(network)
@@ -460,8 +591,8 @@ def load_level(level: int):
 
 def reset_all_switches(network):
     """
-    Resets all switches in the network to their original positions.
-    this means removing any b nodes and the "b" character from line ids.
+    Resets all switches to their original positions by removing b-nodes
+    and stripping the 'b' suffix from line IDs.
     """
     for line in list(network.lines.values()):
         if "b" in line.id:
@@ -476,7 +607,6 @@ def reset_all_switches(network):
                 limit=line.limit,
             )
             del network.lines[line.id]
-    # remove all 'b' nodes
     for node_id in list(network.nodes.keys()):
         if node_id.endswith("b"):
             del network.nodes[node_id]

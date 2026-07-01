@@ -105,7 +105,6 @@ class LoginRequest(BaseModel):
     password: str
 
 class ProgressUpdateRequest(BaseModel):
-    username: str
     current_level: int
     unlocked_levels: int
 
