@@ -14,10 +14,14 @@ class Player(Base):
 
     money = Column(Integer, default=100)
 
+    # ISO date string (e.g. "2026-07-01") of the last daily problem solved
+    daily_solved_date = Column(String, nullable=True, default=None)
+
     def package_data(self):
         return {
             "username": self.username,
             "current_level": self.current_level,
             "unlocked_levels": self.unlocked_levels,
             "money": self.money,
+            "daily_solved_date": self.daily_solved_date,
         }

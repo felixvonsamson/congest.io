@@ -19,6 +19,7 @@ const MINIMAP_SIZE = 350;
 let app, minimapApp, world, ctx, callbacks;
 
 export function load_level(level) {
+  window._dailyMode = false;
   window._solvedExploring = false;
   document.getElementById('solvedPill').style.display = 'none';
 
@@ -279,33 +280,53 @@ async function loadGuestLevel(levelNum) {
     };
   });
 
-  // ── Daily problem / generated network inspection ─────────────
+  // ── Daily problem ─────────────────────────────────────────────
   // TEMP: left/right arrows browse all generated networks for visual inspection
   const inspect = { active: false, index: 0, count: 0 };
 
+  function updateDailyBadge(solved) {
+    document.getElementById('dailyNewPill').style.display = solved ? 'none' : '';
+    document.getElementById('dailySolvedCheck').style.display = solved ? '' : 'none';
+  }
+  window._updateDailyBadge = updateDailyBadge;
+
+  // Set initial badge state from cached player data
+  const _cachedPlayer = JSON.parse(sessionStorage.getItem('player'));
+  if (_cachedPlayer) {
+    const todayIso = new Date().toISOString().slice(0, 10);
+    updateDailyBadge(_cachedPlayer.daily_solved_date === todayIso);
+  }
+
   async function loadDailyProblem() {
     document.getElementById('menuButtons').style.display = 'none';
+    document.getElementById('levelSelectionPanel').style.display = 'none';
     const r = await fetch('/api/daily_problem', { headers: authHeaders() });
-    const network = await r.json();
+    const { network, already_solved } = await r.json();
+
+    window._dailyMode = !already_solved;
+    window._solvedExploring = false;
+    document.getElementById('solvedPill').style.display = 'none';
+
     sessionStorage.setItem('network', JSON.stringify(network));
     updateNetwork(ctx, network, callbacks);
     fitCamera(network);
     const date = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
     document.getElementById('LevelInfoPanel').textContent = `Daily Problem — ${date}`;
+    updateDailyBadge(already_solved);
 
-    // Fetch count for inspection navigation
+    // Fetch count for temp inspection navigation
     const cr = await fetch('/api/generated_network/count', { headers: authHeaders() });
     const { count } = await cr.json();
     inspect.active = true;
     inspect.count = count;
-    // Find today's index so left/right start from the right place
-    const today = Math.floor(Date.now() / 86400000); // days since epoch
+    const today = Math.floor(Date.now() / 86400000);
     inspect.index = today % count;
   }
 
   async function loadGeneratedNetwork(index) {
     const r = await fetch(`/api/generated_network/${index}`, { headers: authHeaders() });
     const network = await r.json();
+    window._dailyMode = false;
     sessionStorage.setItem('network', JSON.stringify(network));
     updateNetwork(ctx, network, callbacks);
     fitCamera(network);
@@ -313,6 +334,31 @@ async function loadGuestLevel(levelNum) {
   }
 
   document.getElementById('dailyProblemBtn').addEventListener('click', loadDailyProblem);
+  document.getElementById('dailyProblemCard').addEventListener('click', loadDailyProblem);
+
+  // Daily solved overlay buttons
+  document.getElementById('dailySolvedGotItBtn').addEventListener('click', () => {
+    const overlay = document.getElementById('dailySolvedOverlay');
+    overlay.style.opacity = '0';
+    overlay.addEventListener('transitionend', () => {
+      overlay.style.display = 'none';
+      overlay.style.opacity = '';
+    }, { once: true });
+    window._dailyMode = false;
+    window._solvedExploring = true;
+    const pill = document.getElementById('solvedPill');
+    pill.style.display = 'flex';
+    pill.classList.remove('entering');
+    requestAnimationFrame(() => requestAnimationFrame(() => pill.classList.add('entering')));
+  });
+
+  document.getElementById('dailySolvedCareerBtn').addEventListener('click', () => {
+    const overlay = document.getElementById('dailySolvedOverlay');
+    overlay.style.display = 'none';
+    overlay.style.opacity = '';
+    window._dailyMode = false;
+    document.getElementById('levelSelectionPanel').style.display = 'block';
+  });
 
   // ── Keyboard shortcuts ───────────────────────────────────────
   window.addEventListener('keydown', (e) => {

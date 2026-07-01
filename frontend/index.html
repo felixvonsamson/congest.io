@@ -117,7 +117,13 @@
         <svg class="w-4 h-4 text-amber-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5"/>
         </svg>
-        <span class="text-amber-400">Daily Problem</span>
+        <span class="text-amber-400 flex-1">Daily Problem</span>
+        <span id="dailyNewPill" style="display:none;"
+              class="text-xs font-bold px-1.5 py-0.5 rounded-full bg-amber-500 text-black leading-none">NEW</span>
+        <svg id="dailySolvedCheck" style="display:none;" class="w-4 h-4 text-emerald-400 shrink-0"
+             fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/>
+        </svg>
       </button>
       <button id="authButton"
               class="px-4 py-2.5 rounded-xl text-left flex items-center gap-2.5
@@ -197,6 +203,21 @@
           ✕
         </button>
       </div>
+      <!-- Daily problem card -->
+      <div id="dailyProblemCard"
+           class="shrink-0 mx-5 mt-5 px-5 py-4 rounded-xl cursor-pointer
+                  bg-gray-800/60 border border-amber-500/20
+                  flex items-center gap-4
+                  hover:bg-amber-500/10 active:bg-amber-500/20 transition-colors">
+        <svg class="w-8 h-8 text-amber-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5"/>
+        </svg>
+        <div class="flex-1 min-w-0">
+          <div class="text-white font-semibold text-sm">Daily Problem</div>
+          <div id="dailyCardDate" class="text-gray-400 text-xs mt-0.5"></div>
+        </div>
+        <div id="dailyCardStatus"></div>
+      </div>
       <!-- Grid -->
       <div id="levelList"
            class="flex-1 overflow-y-auto p-5 flex flex-wrap gap-4 justify-center content-start"
@@ -227,6 +248,31 @@
                 class="w-full py-2 rounded-xl text-xs text-gray-600
                        hover:text-gray-400 hover:bg-white/5 transition-colors">
           View solution
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Daily problem solved overlay -->
+  <div id="dailySolvedOverlay" style="display:none; opacity:0; transition: opacity 0.3s ease;"
+       class="fixed inset-0 z-[2000] bg-black/55 backdrop-blur-sm">
+    <div class="absolute inset-0 flex items-center justify-center p-4">
+      <div class="bg-gray-900 border border-white/10 rounded-2xl shadow-2xl
+                  p-10 text-center w-[min(88vw,380px)]">
+        <div class="text-6xl mb-4">🌅</div>
+        <div class="text-4xl font-extrabold text-white mb-2">Daily Solved!</div>
+        <div id="dailyRewardMessage" class="text-xl text-yellow-400 font-semibold mb-2"></div>
+        <div class="text-sm text-gray-400 mb-6">Come back tomorrow for a new challenge!</div>
+        <button id="dailySolvedGotItBtn"
+                class="w-full py-3 rounded-xl text-base font-bold
+                       bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white
+                       shadow-lg shadow-black/50 transition-colors mb-3">
+          Got it!
+        </button>
+        <button id="dailySolvedCareerBtn"
+                class="w-full py-2 rounded-xl text-xs text-gray-600
+                       hover:text-gray-400 hover:bg-white/5 transition-colors">
+          Play Career Mode
         </button>
       </div>
     </div>

@@ -37,6 +37,14 @@ function triggerSolvedUI(rewardText) {
   overlay.style.opacity = '1';
 }
 
+function triggerDailySolvedUI(rewardText) {
+  document.getElementById('dailyRewardMessage').textContent = rewardText;
+  const overlay = document.getElementById('dailySolvedOverlay');
+  overlay.style.display = 'block';
+  void overlay.offsetWidth;
+  overlay.style.opacity = '1';
+}
+
 /**
  * Rebuild the PixiJS scene from new network data.
  *
@@ -204,11 +212,30 @@ export function updateNetwork(ctx, network, callbacks) {
   const player = JSON.parse(sessionStorage.getItem('player'));
   if (player?.is_guest) {
     checkSolutionGuest(network, player);
+  } else if (window._dailyMode) {
+    checkDailySolution(network);
   } else {
     checkSolution(network);
   }
 }
 
+
+function checkDailySolution(network) {
+  fetch('/api/check_daily_solution', {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ network_data: network }),
+  })
+    .then(r => r.json())
+    .then(data => {
+      if (!data.solved) { hideSolvedUI(); return; }
+      const player = data.player;
+      document.getElementById('moneyAmount').textContent = player.money + '€';
+      sessionStorage.setItem('player', JSON.stringify(player));
+      if (window._updateDailyBadge) window._updateDailyBadge(true);
+      triggerDailySolvedUI(data.reward > 0 ? `+${data.reward}€` : '');
+    });
+}
 
 function checkSolution(network) {
   fetch('/api/check_solution', {

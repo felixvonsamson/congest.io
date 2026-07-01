@@ -14,18 +14,20 @@ from .network import (
     load_level,
     reset_all_switches,
     validate_network,
+    get_or_create_daily_network,
 )
 from .schemas import (
     ProgressUpdateRequest,
-    TopologyChangeRequest, 
-    LoadLevelRequest, 
+    TopologyChangeRequest,
+    LoadLevelRequest,
     NetworkStateRequest,
     SwitchNodeRequest,
     ResetSwitchesRequest,
     dict_to_network_state,
     RegisterRequest,
     LoginRequest,
-    rewardResponse
+    rewardResponse,
+    DailyProblemResponse,
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import APIRouter
@@ -42,6 +44,15 @@ from .jwt_utils import (
 )
 
 Base.metadata.create_all(bind=engine)
+
+# Migrate existing DB: add daily_solved_date column if absent
+from sqlalchemy import text as _text
+with engine.connect() as _conn:
+    try:
+        _conn.execute(_text("ALTER TABLE players ADD COLUMN daily_solved_date VARCHAR DEFAULT NULL"))
+        _conn.commit()
+    except Exception:
+        pass  # column already exists
 
 app = FastAPI()
 router = APIRouter(prefix="/api")
@@ -248,16 +259,50 @@ def _generated_network_files():
     return sorted(Path("generated_networks").glob("network_*.json"))
 
 
-@router.get("/daily_problem")
+@router.get("/daily_problem", response_model=DailyProblemResponse)
 def daily_problem(player: Player = Depends(get_current_player)):
-    files = _generated_network_files()
-    if not files:
-        raise HTTPException(status_code=404, detail="No generated networks available")
-    today = datetime.date.today().toordinal()
-    chosen = files[today % len(files)]
-    with open(chosen) as f:
-        data = json.load(f)
-    return dict_to_network_state(data)
+    network = get_or_create_daily_network()
+    today = datetime.date.today().isoformat()
+    already_solved = player.daily_solved_date == today
+    return DailyProblemResponse(
+        network=network.model_dump(),
+        already_solved=already_solved,
+    )
+
+
+@router.post("/check_daily_solution", response_model=rewardResponse)
+def check_daily_solution(
+    data: NetworkStateRequest,
+    player: Player = Depends(get_current_player),
+    db: Session = Depends(get_db),
+):
+    network = dict_to_network_state(data.network_data)
+
+    try:
+        validate_network(network)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # Validate topology against today's daily network
+    original = get_or_create_daily_network()
+    submitted_reset = reset_all_switches(deepcopy(network))
+    original_nodes = {nid: (n.injection, n.x, n.y) for nid, n in original.nodes.items()}
+    submitted_nodes = {nid: (n.injection, n.x, n.y) for nid, n in submitted_reset.nodes.items()}
+    if original_nodes != submitted_nodes or set(original.lines.keys()) != set(submitted_reset.lines.keys()):
+        raise HTTPException(status_code=400, detail="Submitted network does not match today's daily problem")
+
+    network = calculate_power_flow(network)
+    all_lines_ok = all(abs(line.flow) <= line.limit for line in network.lines.values())
+
+    today = datetime.date.today().isoformat()
+    reward = 0
+    if all_lines_ok and player.daily_solved_date != today:
+        player.daily_solved_date = today
+        reward = 50
+        player.money += reward
+        db.commit()
+
+    return rewardResponse(solved=all_lines_ok, player=player.package_data(), reward=reward)
 
 
 @router.get("/generated_network/count")

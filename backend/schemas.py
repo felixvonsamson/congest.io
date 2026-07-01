@@ -112,3 +112,7 @@ class rewardResponse(BaseModel):
     solved: bool
     player: dict
     reward: int
+
+class DailyProblemResponse(BaseModel):
+    network: dict
+    already_solved: bool

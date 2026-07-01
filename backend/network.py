@@ -2,12 +2,14 @@ import math
 import random
 import time
 import logging
+import datetime
 from .schemas import (
     NetworkState,
     TopologyChangeRequest,
     Node,
     Line,
     update_network_from_file,
+    dict_to_network_state,
 )
 import numpy as np
 import heapq
@@ -562,6 +564,27 @@ def solve_network(network):
                 heapq.heappush(network_states, best_for_node)
 
     return best_so_far
+
+
+def get_or_create_daily_network() -> NetworkState:
+    """
+    Return today's daily problem network, generating and caching it if needed.
+    The network is stored at generated_networks/daily/YYYY-MM-DD.json.
+    """
+    today = datetime.date.today().isoformat()
+    daily_dir = Path("generated_networks/daily")
+    daily_dir.mkdir(parents=True, exist_ok=True)
+    filepath = daily_dir / f"{today}.json"
+
+    if filepath.exists():
+        with open(filepath) as f:
+            return dict_to_network_state(json.load(f))
+
+    logger.info("Generating daily network for %s", today)
+    network = generate_network()
+    with open(filepath, "w") as f:
+        json.dump(network.model_dump(), f, indent=2)
+    return network
 
 
 def load_level(level: int):
