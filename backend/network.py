@@ -312,9 +312,9 @@ def force_directed_layout(
             for i in range(num_neighbors):
                 neighbor_id, angle = angles[i]
                 next_neighbor_id, next_angle = angles[(i + 1) % num_neighbors]
-                gap = max((next_angle - angle) % (2 * np.pi), 1e-3)
-                # Repulsive angular term: grows strongly as gap → 0,
-                # fades when gap exceeds ideal spacing
+                gap = max((next_angle - angle) % (2 * np.pi), 0.2)
+                # Repulsive angular term: grows as gap shrinks below ideal,
+                # clamped at 0.2 rad (~11°) to prevent force explosion
                 torque_magnitude = angular_spring * (1.0 / gap - 1.0 / ideal_angle)
                 vec_1 = positions[neighbor_id] - node_pos
                 vec_2 = positions[next_neighbor_id] - node_pos
