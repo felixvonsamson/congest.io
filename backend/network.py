@@ -246,10 +246,10 @@ def force_directed_layout(
     network,
     k=50.0,
     iterations=50,
-    repulsion=2.0,  # doubled vs original to compensate for fixing the double-count
+    repulsion=1000.0,
     spring=0.02,
     damping=0.85,
-    angular_spring=0.02,
+    angular_spring=0.004,
     centering=0.005,
 ):
     """
