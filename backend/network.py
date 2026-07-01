@@ -249,7 +249,6 @@ def force_directed_layout(
     repulsion=1000.0,
     spring=0.02,
     damping=0.85,
-    angular_spring=0.004,
     centering=0.005,
 ):
     """
@@ -294,37 +293,6 @@ def force_directed_layout(
             force = (delta / dist) * force_magnitude
             forces[line.from_node] += force
             forces[line.to_node] -= force
-
-        # Angular springs
-        for node_id in adjacency:
-            neighbors = adjacency[node_id]
-            num_neighbors = len(neighbors)
-            if num_neighbors < 2:
-                continue
-            node_pos = positions[node_id]
-            angles = []
-            for neighbor_id in neighbors:
-                vec = positions[neighbor_id] - node_pos
-                angle = np.arctan2(vec[1], vec[0])
-                angles.append((neighbor_id, angle))
-            angles.sort(key=lambda x: x[1])
-            ideal_angle = 2 * np.pi / num_neighbors
-            for i in range(num_neighbors):
-                neighbor_id, angle = angles[i]
-                next_neighbor_id, next_angle = angles[(i + 1) % num_neighbors]
-                gap = max((next_angle - angle) % (2 * np.pi), 0.2)
-                # Repulsive angular term: grows as gap shrinks below ideal,
-                # clamped at 0.2 rad (~11°) to prevent force explosion
-                torque_magnitude = angular_spring * (1.0 / gap - 1.0 / ideal_angle)
-                vec_1 = positions[neighbor_id] - node_pos
-                vec_2 = positions[next_neighbor_id] - node_pos
-                perp_1 = np.array([-vec_1[1], vec_1[0]])
-                perp_2 = np.array([vec_2[1], -vec_2[0]])
-                perp_1 /= np.linalg.norm(perp_1) + 1e-6
-                perp_2 /= np.linalg.norm(perp_2) + 1e-6
-                forces[neighbor_id] += perp_1 * torque_magnitude
-                forces[next_neighbor_id] += perp_2 * torque_magnitude
-                forces[node_id] -= (perp_1 + perp_2) * torque_magnitude
 
         # Weak centering force toward centroid
         centroid = np.mean(list(positions.values()), axis=0)
