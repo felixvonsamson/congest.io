@@ -346,17 +346,24 @@ function makeRedispatchBtn(dir, price) {
     .fill({ color: col, alpha: 0.70 })
     .stroke({ width: 1.5, color: col });
 
-  // Direction triangle drawn in accent colour
-  const tri = new Graphics();
-  if (dir === 'up') {
-    tri.poly([-6, 3, 6, 3, 0, -5]).fill(col);
-  } else {
-    tri.poly([-6, -3, 6, -3, 0, 5]).fill(col);
-  }
-  tri.x = -14;
+  // Direction sign (+/-) drawn in white
+  const sign = new Text({
+    text: dir === 'up' ? '+' : '−',
+    style: {
+      fill: '#ffffff',
+      fontSize: 18,
+      fontWeight: 'bold',
+      fontFamily: 'sans-serif',
+    },
+  });
+  sign.anchor.set(0.5);
+  sign.x = -14;
 
+  // Cost is floored at 0€ so it never shows alongside the direction sign as a
+  // second, confusing negative (some nodes have a negative cost_decrease —
+  // a rebate for reducing output — which the button intentionally hides).
   const label = new Text({
-    text: price + '€',
+    text: Math.max(0, price) + '€',
     style: {
       fill: '#ffffff',
       fontSize: 14,
@@ -368,7 +375,7 @@ function makeRedispatchBtn(dir, price) {
   label.anchor.set(0, 0.5);
   label.x = -4;
 
-  c.addChild(bg, tri, label);
+  c.addChild(bg, sign, label);
   c.hitArea = new Rectangle(-w / 2, -h / 2, w, h);
   return c;
 }

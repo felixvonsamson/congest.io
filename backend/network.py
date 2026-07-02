@@ -48,6 +48,11 @@ SOLVER_TIMEOUT_SECONDS = 10
 # Maximum retries when generate_network fails to produce a solvable level.
 MAX_GENERATION_RETRIES = 10
 
+# Range for randomly assigned redispatch costs on generated nodes (€/MW),
+# matching the spread used across the hand-built levels.
+COST_INCREASE_RANGE = (20, 100)
+COST_DECREASE_RANGE = (-20, 40)
+
 
 def validate_network(network: NetworkState):
     """Raise ValueError if any line references a node that does not exist."""
@@ -177,7 +182,14 @@ def _generate_once(num_nodes: int, width: float, height: float):
 
     nodes = {}
     for i, (x, y) in enumerate(points):
-        nodes[str(i)] = Node(id=str(i), x=x, y=y, injection=raw[i])
+        nodes[str(i)] = Node(
+            id=str(i),
+            x=x,
+            y=y,
+            injection=raw[i],
+            cost_increase=random.randint(*COST_INCREASE_RANGE),
+            cost_decrease=random.randint(*COST_DECREASE_RANGE),
+        )
 
     lines = {}
     for u in adjacency:

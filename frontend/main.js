@@ -555,6 +555,14 @@ function next_level() {
 
   const player = JSON.parse(sessionStorage.getItem('player'));
   const btn = document.getElementById('nextLevelBtn');
+  const pillBtn = document.getElementById('nextLevelBtnPill');
+
+  const resetButtons = () => {
+    btn.disabled = false;
+    btn.textContent = 'Next Level →';
+    pillBtn.disabled = false;
+    pillBtn.textContent = 'Next Level →';
+  };
 
   if (player.is_guest) {
     loadGuestLevel(player.current_level + 1).then(network => {
@@ -563,8 +571,7 @@ function next_level() {
       sessionStorage.setItem('network', JSON.stringify(network));
       updateNetwork(ctx, network, callbacks);
       fitCamera(network);
-      btn.disabled = false;
-      btn.textContent = 'Next Level →';
+      resetButtons();
     });
     return;
   }
@@ -580,8 +587,7 @@ function next_level() {
       sessionStorage.setItem('player', JSON.stringify(player));
       updateNetwork(ctx, data, callbacks);
       fitCamera(data);
-      btn.disabled = false;
-      btn.textContent = 'Next Level →';
+      resetButtons();
     });
 }
 

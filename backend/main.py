@@ -176,8 +176,12 @@ def check_solution(
     # Verify the topology is a legal derivative of the original level
     original = load_level(network.level)
     submitted_reset = reset_all_switches(deepcopy(network))
+    adjustments = network.redispatch.get("adjustments", {})
     original_nodes = {nid: (n.injection, n.x, n.y) for nid, n in original.nodes.items()}
-    submitted_nodes = {nid: (n.injection, n.x, n.y) for nid, n in submitted_reset.nodes.items()}
+    submitted_nodes = {
+        nid: (n.injection - adjustments.get(nid, 0), n.x, n.y)
+        for nid, n in submitted_reset.nodes.items()
+    }
     original_lines = set(original.lines.keys())
     submitted_lines = set(submitted_reset.lines.keys())
     if original_nodes != submitted_nodes or original_lines != submitted_lines:
@@ -296,8 +300,12 @@ def check_daily_solution(
     # Validate topology against today's daily network
     original = get_or_create_daily_network()
     submitted_reset = reset_all_switches(deepcopy(network))
+    adjustments = network.redispatch.get("adjustments", {})
     original_nodes = {nid: (n.injection, n.x, n.y) for nid, n in original.nodes.items()}
-    submitted_nodes = {nid: (n.injection, n.x, n.y) for nid, n in submitted_reset.nodes.items()}
+    submitted_nodes = {
+        nid: (n.injection - adjustments.get(nid, 0), n.x, n.y)
+        for nid, n in submitted_reset.nodes.items()
+    }
     if original_nodes != submitted_nodes or set(original.lines.keys()) != set(submitted_reset.lines.keys()):
         raise HTTPException(status_code=400, detail="Submitted network does not match today's daily problem")
 
