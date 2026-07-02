@@ -284,6 +284,7 @@ async function loadGuestLevel(levelNum) {
 
   function updateDailyBadge(solved) {
     document.getElementById('dailyNewPill').style.display = solved ? 'none' : '';
+    document.getElementById('menuDailyNewPill').style.display = solved ? 'none' : '';
     document.getElementById('dailySolvedCheck').style.display = solved ? '' : 'none';
   }
   window._updateDailyBadge = updateDailyBadge;
@@ -327,6 +328,8 @@ async function loadGuestLevel(levelNum) {
     }, { once: true });
     window._dailyMode = false;
     window._solvedExploring = true;
+    document.getElementById('nextLevelBtnPill').style.display = 'none';
+    document.getElementById('levelSelectBtnPill').style.display = '';
     const pill = document.getElementById('solvedPill');
     pill.style.display = 'flex';
     pill.classList.remove('entering');
@@ -456,6 +459,11 @@ async function loadGuestLevel(levelNum) {
     next_level();
   });
 
+  document.getElementById('levelSelectBtnPill').addEventListener('click', () => {
+    document.getElementById('solvedPill').style.display = 'none';
+    document.getElementById('levelSelectionPanel').style.display = 'block';
+  });
+
   document.getElementById('useRedispatch').addEventListener('click', () => {
     sessionStorage.setItem('network_before_redispatch', sessionStorage.getItem('network'));
     settings.mode = 'redispatch';
@@ -542,6 +550,8 @@ function fitCamera(network) {
 function next_level() {
   window._solvedExploring = false;
   document.getElementById('solvedPill').style.display = 'none';
+  document.getElementById('nextLevelBtnPill').style.display = '';
+  document.getElementById('levelSelectBtnPill').style.display = 'none';
 
   const player = JSON.parse(sessionStorage.getItem('player'));
   const btn = document.getElementById('nextLevelBtn');

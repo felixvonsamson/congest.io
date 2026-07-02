@@ -233,6 +233,7 @@ function checkDailySolution(network) {
       document.getElementById('moneyAmount').textContent = player.money + '€';
       sessionStorage.setItem('player', JSON.stringify(player));
       if (window._updateDailyBadge) window._updateDailyBadge(true);
+      if (window._refreshScoreboard) window._refreshScoreboard();
       triggerDailySolvedUI(data.reward > 0 ? `+${data.reward}€` : '');
     });
 }
@@ -252,6 +253,7 @@ function checkSolution(network) {
       const player = data.player;
       document.getElementById('moneyAmount').textContent = player.money + '€';
       sessionStorage.setItem('player', JSON.stringify(player));
+      if (window._refreshScoreboard) window._refreshScoreboard();
       triggerSolvedUI(`Reward: ${data.reward}€`);
     });
 }
@@ -287,6 +289,7 @@ function checkSolutionGuest(network, player) {
   });
 
   document.getElementById('moneyAmount').textContent = player.money + '€';
+  if (window._refreshScoreboard) window._refreshScoreboard();
   triggerSolvedUI(reward > 0 ? `Reward: ${reward}€` : '');
 }
 

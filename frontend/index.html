@@ -12,6 +12,7 @@
 <body>
   <script type="module" src="./main.js"></script>
   <script type="module" src="./ui/level_selection.js"></script>
+  <script type="module" src="./ui/scoreboard.js"></script>
 
   <!-- PixiJS canvas -->
   <div id="app"></div>
@@ -83,7 +84,7 @@
       </button>
       <!-- Menu button -->
       <button id="menuBtn" aria-label="Menu"
-              class="flex items-center gap-2 px-3.5 py-2 rounded-xl
+              class="relative flex items-center gap-2 px-3.5 py-2 rounded-xl
                      bg-blue-600 hover:bg-blue-500 active:bg-blue-700
                      text-white text-sm font-semibold
                      shadow-lg shadow-black/50 transition-colors select-none">
@@ -91,12 +92,31 @@
           <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"/>
         </svg>
         Menu
+        <span id="menuDailyNewPill" style="display:none;"
+              class="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-amber-400 ring-2 ring-blue-600"></span>
       </button>
     </div>
 
     <!-- Dropdown -->
     <div id="menuButtons" style="display:none;"
-         class="flex flex-col gap-1 min-w-[148px]">
+         class="flex flex-col gap-1 min-w-[160px]">
+      <button id="dailyProblemBtn"
+              class="px-4 py-2.5 rounded-xl text-left flex items-center gap-2.5
+                     bg-gray-900/95 backdrop-blur-md border border-white/[0.08]
+                     text-white text-sm font-medium
+                     hover:bg-white/10 active:bg-white/20 transition-colors
+                     shadow-lg shadow-black/50">
+        <svg class="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5"/>
+        </svg>
+        <span class="flex-1">Daily Problem</span>
+        <span id="dailyNewPill" style="display:none;"
+              class="text-xs font-bold px-1.5 py-0.5 rounded-full bg-amber-500 text-black leading-none">NEW</span>
+        <svg id="dailySolvedCheck" style="display:none;" class="w-4 h-4 text-emerald-400 shrink-0"
+             fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/>
+        </svg>
+      </button>
       <button id="levelSelection"
               class="px-4 py-2.5 rounded-xl text-left flex items-center gap-2.5
                      bg-gray-900/95 backdrop-blur-md border border-white/[0.08]
@@ -106,24 +126,18 @@
         <svg class="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12"/>
         </svg>
-        Levels
+        Campaign Mode
       </button>
-      <button id="dailyProblemBtn"
+      <button id="scoreboardBtn"
               class="px-4 py-2.5 rounded-xl text-left flex items-center gap-2.5
                      bg-gray-900/95 backdrop-blur-md border border-white/[0.08]
                      text-white text-sm font-medium
                      hover:bg-white/10 active:bg-white/20 transition-colors
                      shadow-lg shadow-black/50">
-        <svg class="w-4 h-4 text-amber-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5"/>
+        <svg class="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z"/>
         </svg>
-        <span class="text-amber-400 flex-1">Daily Problem</span>
-        <span id="dailyNewPill" style="display:none;"
-              class="text-xs font-bold px-1.5 py-0.5 rounded-full bg-amber-500 text-black leading-none">NEW</span>
-        <svg id="dailySolvedCheck" style="display:none;" class="w-4 h-4 text-emerald-400 shrink-0"
-             fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/>
-        </svg>
+        Leaderboard
       </button>
       <button id="authButton"
               class="px-4 py-2.5 rounded-xl text-left flex items-center gap-2.5
@@ -152,6 +166,12 @@
                      bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white
                      transition-colors shadow-md shadow-black/40">
         Next Level →
+      </button>
+      <button id="levelSelectBtnPill" style="display:none;"
+              class="px-3 py-1.5 rounded-lg text-xs font-semibold
+                     bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white
+                     transition-colors shadow-md shadow-black/40">
+        Level Select
       </button>
     </div>
     <div id="redispatchUnbalance" style="display:none;"
@@ -274,6 +294,44 @@
                        hover:text-gray-400 hover:bg-white/5 transition-colors">
           Play Career Mode
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Leaderboard panel -->
+  <div id="scoreboardPanel" style="display:none;"
+       class="fixed inset-0 z-[800] bg-black/60 backdrop-blur-sm">
+    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2
+                w-[min(92vw,640px)] max-h-[80vh]
+                bg-gray-900 border border-white/10 rounded-2xl shadow-2xl
+                flex flex-col overflow-hidden">
+      <!-- Header -->
+      <div class="flex items-center justify-between px-6 py-4 border-b border-white/[0.08] shrink-0">
+        <h2 class="text-lg font-bold text-white tracking-wide">Leaderboard</h2>
+        <button id="scoreboardCloseBtn" aria-label="Close"
+                class="w-8 h-8 flex items-center justify-center rounded-full
+                       text-gray-500 hover:text-white hover:bg-white/10 text-lg transition-colors">
+          ✕
+        </button>
+      </div>
+      <!-- Table -->
+      <div class="overflow-y-auto flex-1" style="scrollbar-width:none;">
+        <table id="leaderboardTable" class="w-full text-sm">
+          <thead class="sticky top-0 bg-gray-900/95 backdrop-blur-sm border-b border-white/[0.08]">
+            <tr class="text-gray-400 text-xs uppercase tracking-wider select-none">
+              <th class="px-5 py-3 text-left w-10">#</th>
+              <th class="px-5 py-3 text-left cursor-pointer hover:text-white transition-colors" data-col="username">Player</th>
+              <th class="px-5 py-3 text-right cursor-pointer hover:text-white transition-colors" data-col="unlocked_levels">🎮 Campaign</th>
+              <th class="px-5 py-3 text-right cursor-pointer hover:text-white transition-colors" data-col="daily_streak">🔥 Streak</th>
+              <th class="px-5 py-3 text-right cursor-pointer hover:text-white transition-colors" data-col="daily_solved_count">📅 Daily</th>
+            </tr>
+          </thead>
+          <tbody id="leaderboardBody">
+            <tr>
+              <td colspan="5" class="px-5 py-10 text-center text-gray-500">Loading…</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
   </div>

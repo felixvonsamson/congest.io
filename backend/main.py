@@ -45,14 +45,19 @@ from .jwt_utils import (
 
 Base.metadata.create_all(bind=engine)
 
-# Migrate existing DB: add daily_solved_date column if absent
+# Migrate existing DB: add columns if absent
 from sqlalchemy import text as _text
 with engine.connect() as _conn:
-    try:
-        _conn.execute(_text("ALTER TABLE players ADD COLUMN daily_solved_date VARCHAR DEFAULT NULL"))
-        _conn.commit()
-    except Exception:
-        pass  # column already exists
+    for _col, _ddl in [
+        ("daily_solved_date", "ALTER TABLE players ADD COLUMN daily_solved_date VARCHAR DEFAULT NULL"),
+        ("daily_solved_count", "ALTER TABLE players ADD COLUMN daily_solved_count INTEGER DEFAULT 0"),
+        ("daily_streak",       "ALTER TABLE players ADD COLUMN daily_streak INTEGER DEFAULT 0"),
+    ]:
+        try:
+            _conn.execute(_text(_ddl))
+            _conn.commit()
+        except Exception:
+            pass  # column already exists
 
 app = FastAPI()
 router = APIRouter(prefix="/api")
@@ -141,6 +146,11 @@ def save_progress(
 @router.get("/me")
 def get_me(player: Player = Depends(get_current_player)):
     return player.package_data()
+
+@router.get("/leaderboard")
+def leaderboard(player: Player = Depends(get_current_player), db: Session = Depends(get_db)):
+    players = db.query(Player).order_by(Player.daily_streak.desc(), Player.money.desc()).all()
+    return [p.package_data() for p in players]
 
 @router.post("/check_solution", response_model=rewardResponse)
 def check_solution(
@@ -297,7 +307,13 @@ def check_daily_solution(
     today = datetime.date.today().isoformat()
     reward = 0
     if all_lines_ok and player.daily_solved_date != today:
+        yesterday = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
+        if player.daily_solved_date == yesterday:
+            player.daily_streak = (player.daily_streak or 0) + 1
+        else:
+            player.daily_streak = 1
         player.daily_solved_date = today
+        player.daily_solved_count = (player.daily_solved_count or 0) + 1
         reward = 50
         player.money += reward
         db.commit()

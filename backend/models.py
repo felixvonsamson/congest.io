@@ -16,6 +16,8 @@ class Player(Base):
 
     # ISO date string (e.g. "2026-07-01") of the last daily problem solved
     daily_solved_date = Column(String, nullable=True, default=None)
+    daily_solved_count = Column(Integer, default=0)
+    daily_streak = Column(Integer, default=0)
 
     def package_data(self):
         return {
@@ -24,4 +26,6 @@ class Player(Base):
             "unlocked_levels": self.unlocked_levels,
             "money": self.money,
             "daily_solved_date": self.daily_solved_date,
+            "daily_solved_count": self.daily_solved_count or 0,
+            "daily_streak": self.daily_streak or 0,
         }
