@@ -4,7 +4,7 @@ import json
 import datetime
 from pathlib import Path
 from fastapi import FastAPI, Depends, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from .network import (
@@ -343,6 +343,80 @@ def get_generated_network(index: int, player: Player = Depends(get_current_playe
     with open(files[index % len(files)]) as f:
         data = json.load(f)
     return dict_to_network_state(data)
+
+
+@app.get("/privacy", response_class=HTMLResponse)
+def privacy_policy():
+    return """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Privacy Policy — Flux Control</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+           max-width: 680px; margin: 60px auto; padding: 0 24px;
+           color: #1a1a1a; line-height: 1.6; }
+    h1 { font-size: 1.6rem; margin-bottom: 0.25em; }
+    h2 { font-size: 1.1rem; margin-top: 2em; }
+    p, li { font-size: 0.95rem; }
+    a { color: #0066cc; }
+    .muted { color: #666; font-size: 0.85rem; }
+  </style>
+</head>
+<body>
+  <h1>Privacy Policy</h1>
+  <p class="muted">Flux Control &mdash; Last updated July 2026</p>
+
+  <p>Flux Control is a power-grid puzzle game. This policy describes what data
+  we collect, why, and how you can request deletion.</p>
+
+  <h2>What we collect</h2>
+  <ul>
+    <li><strong>Username and hashed password</strong> — required to create an
+        account. We never store your password in plain text.</li>
+    <li><strong>Gameplay data</strong> — your current level, solved levels,
+        coin balance, daily challenge history, and streak count. This data
+        exists solely to save your progress and display the leaderboard.</li>
+  </ul>
+
+  <p>We do <strong>not</strong> collect your name, email address, phone
+  number, location, device identifiers, or any data for advertising or
+  analytics purposes. There are no third-party SDKs in the app.</p>
+
+  <h2>How we use it</h2>
+  <p>Your data is used only to run the game: authenticate you, restore your
+  progress across sessions, and calculate leaderboard rankings. It is not
+  sold, shared with third parties, or used for any purpose outside the
+  game.</p>
+
+  <h2>Where it is stored</h2>
+  <p>Account and progress data is stored on our server at
+  <a href="https://fluxcontrol.eu">fluxcontrol.eu</a>. Your authentication
+  token is stored locally on your device.</p>
+
+  <h2>Data retention and deletion</h2>
+  <p>Your account and all associated data are retained for as long as the
+  service is running. To request deletion of your account and data, email
+  <a href="mailto:felixvonsamson@gmail.com">felixvonsamson@gmail.com</a> with the
+  subject line "Flux Control account deletion" and your username. We will
+  delete your account within 30 days.</p>
+
+  <h2>Children</h2>
+  <p>The game is rated 4+ and is suitable for all ages. We do not knowingly
+  collect data from children under 13 beyond what is described above (a
+  username and gameplay progress), and we do not use that data for any
+  purpose other than running the game.</p>
+
+  <h2>Changes</h2>
+  <p>If this policy changes materially, we will update the date at the top of
+  this page. Continued use of the app after a change constitutes acceptance
+  of the updated policy.</p>
+
+  <h2>Contact</h2>
+  <p><a href="mailto:felixvonsamson@gmail.com">felixvonsamson@gmail.com</a></p>
+</body>
+</html>"""
 
 
 @app.get("/.well-known/apple-app-site-association")
