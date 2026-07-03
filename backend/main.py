@@ -4,6 +4,7 @@ import json
 import datetime
 from pathlib import Path
 from fastapi import FastAPI, Depends, HTTPException
+from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from .network import (
@@ -343,5 +344,16 @@ def get_generated_network(index: int, player: Player = Depends(get_current_playe
         data = json.load(f)
     return dict_to_network_state(data)
 
+
+@app.get("/.well-known/apple-app-site-association")
+def apple_app_site_association():
+    return JSONResponse(
+        content={
+            "webcredentials": {
+                "apps": ["776YBR3ZGA.mglst.Flux-Control"]
+            }
+        },
+        media_type="application/json",
+    )
 
 app.include_router(router)
