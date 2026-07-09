@@ -3,6 +3,7 @@ import math
 import json
 import datetime
 from pathlib import Path
+from typing import Optional
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.security import OAuth2PasswordBearer
@@ -71,6 +72,10 @@ app.add_middleware(
 )
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/login")
+# Same scheme, but tolerant of a missing token: endpoints that are playable
+# without an account (the daily challenge) depend on this and get None for a
+# guest instead of a 401.
+oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="/api/login", auto_error=False)
 
 def get_db():
     db = SessionLocal()
@@ -93,6 +98,21 @@ def get_current_player(
         raise HTTPException(status_code=401, detail="User not found")
 
     return player
+
+
+def get_optional_player(
+    token: Optional[str] = Depends(oauth2_scheme_optional),
+    db: Session = Depends(get_db),
+):
+    """Resolve the player if a valid token is present, else None (guest).
+    Never raises on a missing/invalid token — the caller decides what a
+    guest is allowed to see."""
+    if not token:
+        return None
+    payload = decode_access_token(token)
+    if not payload or "sub" not in payload:
+        return None
+    return db.query(Player).filter(Player.username == payload["sub"]).first()
 
 
 @router.post("/register")
@@ -275,10 +295,13 @@ def _generated_network_files():
 
 
 @router.get("/daily_problem", response_model=DailyProblemResponse)
-def daily_problem(player: Player = Depends(get_current_player)):
+def daily_problem(player: Optional[Player] = Depends(get_optional_player)):
+    # Playable without an account (App Store 5.1.1(v)): the puzzle itself is
+    # a non-account feature. A guest simply never has `already_solved` set —
+    # streaks and the leaderboard remain account-only.
     network = get_or_create_daily_network()
     today = datetime.date.today().isoformat()
-    already_solved = player.daily_solved_date == today
+    already_solved = player is not None and player.daily_solved_date == today
     return DailyProblemResponse(
         network=network.model_dump(),
         already_solved=already_solved,
