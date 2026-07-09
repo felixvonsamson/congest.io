@@ -365,7 +365,14 @@ function updateAndRender() {
 
     // Constant-pixel UI elements
     const inv = 1 / world.scale.x;
-    for (const el of state.uiElements) el.scale.set(inv);
+    for (const el of state.uiElements) {
+      if (el._hoverTarget !== undefined) {
+        el._hoverScale += (el._hoverTarget - el._hoverScale) * 0.3;
+        el.scale.set(inv * el._hoverScale);
+      } else {
+        el.scale.set(inv);
+      }
+    }
 
     // ── Tutorial highlight overlay ─────────────────────────────
     tutHighlightGfx.clear();
@@ -634,7 +641,7 @@ function showSwitchTooltip(e) {
   const rect = app.canvas.getBoundingClientRect();
   const wx = (e.clientX - rect.left - world.x) / world.scale.x;
   const wy = (e.clientY - rect.top - world.y) / world.scale.y;
-  const hitR = 18 / world.scale.x; // matches switch hitArea radius
+  const hitR = (config.sizes.switchRadius * 2.5) / world.scale.x; // matches switch hitArea radius
 
   let nearDisabled = false;
   outer:

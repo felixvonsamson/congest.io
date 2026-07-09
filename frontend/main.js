@@ -170,7 +170,14 @@ async function loadGuestLevel(levelNum) {
 
     // Keep labels / switches / arrows at constant pixel size
     const inv = 1 / world.scale.x;
-    for (const el of state.uiElements) el.scale.set(inv);
+    for (const el of state.uiElements) {
+      if (el._hoverTarget !== undefined) {
+        el._hoverScale += (el._hoverTarget - el._hoverScale) * 0.3;
+        el.scale.set(inv * el._hoverScale);
+      } else {
+        el.scale.set(inv);
+      }
+    }
 
     // Minimap viewport rectangle
     if (state.minimapTransform) {

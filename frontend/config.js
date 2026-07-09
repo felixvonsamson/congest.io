@@ -48,8 +48,8 @@ export const config = {
     nodeRadius: 7,
     ringRadiusOuter: 9,
     ringRadiusInner: 7,
-    particleRadius: 1.25,
-    lineWidth: 2.25,
-    switchRadius: 6,
+    particleRadius: 1,
+    lineWidth: 2,
+    switchRadius: 8,
   },
 };

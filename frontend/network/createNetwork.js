@@ -82,7 +82,7 @@ export function createNetwork(mode, network, callbacks = {}, overview = false) {
     const flow = Math.abs(line.flow);
     const flowText = flow >= 49.5 && flow <= 50.5 ? flow.toFixed(1) : flow.toFixed(0);
     const flowTextColor = overloaded ? config.colors.chipTextOverload : config.colors.chipText;
-    const flowLabel = makeBadge(flowText, flowTextColor, 11);
+    const flowLabel = makeBadge(flowText, flowTextColor, 16);
     flowLabel.x = (from.x + to.x) / 2;
     flowLabel.y = (from.y + to.y) / 2;
     uiLayer.addChild(flowLabel);
@@ -95,9 +95,7 @@ export function createNetwork(mode, network, callbacks = {}, overview = false) {
     const dotColor = overloaded ? config.colors.overloadDot : config.colors.flowDot;
 
     for (let i = 0; i < nParticles; i++) {
-      const gfx = new Graphics();
-      gfx.circle(0, 0, config.sizes.particleRadius).fill(0xffffff);
-      gfx.tint = dotColor;
+      const gfx = makeParticleGfx(dotColor, flow);
       particleLayer.addChild(gfx);
 
       const t0 = i / nParticles;
@@ -126,6 +124,8 @@ export function createNetwork(mode, network, callbacks = {}, overview = false) {
         sw.eventMode = 'static';
         sw.cursor = 'pointer';
         sw.on('pointertap', () => callbacks.onToggle?.(line.id + '_' + end));
+        sw.on('pointerover', () => { sw._hoverTarget = 1.3; });
+        sw.on('pointerout', () => { sw._hoverTarget = 1; });
 
         uiLayer.addChild(sw);
         uiElements.push(sw);
@@ -276,9 +276,7 @@ function addRingParticles(network, nodeId, cx, cy, particleLayer, particles) {
     const dotColor = config.colors.flowDot;
 
     for (let j = 0; j < nParticles; j++) {
-      const gfx = new Graphics();
-      gfx.circle(0, 0, config.sizes.particleRadius).fill(0xffffff);
-      gfx.tint = dotColor;
+      const gfx = makeParticleGfx(dotColor, flow);
       particleLayer.addChild(gfx);
 
       const t0 = j / nParticles;
@@ -297,6 +295,16 @@ function addRingParticles(network, nodeId, cx, cy, particleLayer, particles) {
 
 
 // ── Drawing helpers ───────────────────────────────────────────────
+
+function makeParticleGfx(color, flow) {
+  const r = config.sizes.particleRadius;
+  const g = new Graphics();
+  g.circle(0, 0, r * 2).fill({ color: 0xffffff, alpha: 0.35 }); // glow halo
+  g.circle(0, 0, r).fill(0xffffff); // solid core
+  g.tint = color;
+  g.alpha = Math.min(1, Math.abs(flow)); // fade out as flow → 0
+  return g;
+}
 
 function makeLabel(text, fill, fontSize) {
   const t = new Text({
@@ -326,13 +334,16 @@ function makeSwitch(isB) {
   const g = new Graphics();
   const r = config.sizes.switchRadius;
   if (isB) {
+    // Connected to the bypass node — highlight with the b-node accent color.
     g.circle(0, 0, r).fill({ color: config.colors.switch });
-    g.circle(0, 0, r + 2.5).stroke({ width: 2.5, color: config.colors.switchActive });
+    g.circle(0, 0, r + 3).stroke({ width: 3, color: config.colors.bNode });
   } else {
     g.circle(0, 0, r).fill({ color: config.colors.switchActive });
-    g.circle(0, 0, r + 2.5).stroke({ width: 2.5, color: config.colors.switch });
+    g.circle(0, 0, r + 3).stroke({ width: 3, color: config.colors.switch });
   }
-  g.hitArea = new Circle(0, 0, r * 3);
+  g.hitArea = new Circle(0, 0, r * 2.5);
+  g._hoverScale = 1;
+  g._hoverTarget = 1;
   return g;
 }
 
