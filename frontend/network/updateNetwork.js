@@ -1,5 +1,13 @@
 import { createNetwork, makeBNodeContainer, SPLIT_SCALE } from './createNetwork.js';
 import { authHeaders, setGuestProgress } from '../auth/auth.js';
+import { starsForRedispatchCost, starsRowHTML, animateStarsRow } from '../ui/stars.js';
+
+export const DIFFICULTY_COLORS = {
+  'Easy': '#34d399',      // emerald-400
+  'Medium': '#fbbf24',    // amber-400
+  'Hard': '#fb923c',      // orange-400
+  'Very Hard': '#f87171', // red-400
+};
 
 // ── Solved UI helpers ───────────────────────────────────────────────
 
@@ -16,11 +24,18 @@ function hideSolvedPill() {
   pill.style.display = 'none';
 }
 
-function triggerSolvedUI(rewardText) {
+function renderStars(containerId, stars, rowClass) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = stars != null ? starsRowHTML(stars, rowClass) : '';
+  if (stars != null) animateStarsRow(container);
+}
+
+function triggerSolvedUI(rewardText, stars) {
   document.getElementById('rewardMessage').textContent = rewardText;
 
   if (window._solvedExploring) {
     const pill = document.getElementById('solvedPill');
+    renderStars('solvedPillStars', stars, 'starsRowSmall');
     if (pill.style.display === 'none' || !pill.style.display) {
       pill.style.display = 'flex';
       pill.classList.remove('entering');
@@ -30,6 +45,7 @@ function triggerSolvedUI(rewardText) {
     return;
   }
 
+  renderStars('solvedStars', stars, 'starsRowLarge');
   const overlay = document.getElementById('solvedOverlay');
   overlay.style.opacity = '0';
   overlay.style.display = 'block';
@@ -37,8 +53,9 @@ function triggerSolvedUI(rewardText) {
   overlay.style.opacity = '1';
 }
 
-function triggerDailySolvedUI(rewardText) {
+function triggerDailySolvedUI(rewardText, stars) {
   document.getElementById('dailyRewardMessage').textContent = rewardText;
+  renderStars('dailySolvedStars', stars, 'starsRowLarge');
   const overlay = document.getElementById('dailySolvedOverlay');
   overlay.style.display = 'block';
   void overlay.offsetWidth;
@@ -183,6 +200,18 @@ export function updateNetwork(ctx, network, callbacks) {
       : `Level ${network.level}`;
   }
 
+  const difficultyEl = document.getElementById('difficultyBadge');
+  if (difficultyEl) {
+    const color = DIFFICULTY_COLORS[network.difficulty];
+    if (color) {
+      difficultyEl.textContent = network.difficulty;
+      difficultyEl.style.color = color;
+      difficultyEl.style.display = 'block';
+    } else {
+      difficultyEl.style.display = 'none';
+    }
+  }
+
   const tutEl = document.getElementById('tutorialHelp');
   if (network.tutorial_info) {
     tutEl.style.display = 'block';
@@ -234,7 +263,7 @@ function checkDailySolution(network) {
       sessionStorage.setItem('player', JSON.stringify(player));
       if (window._updateDailyBadge) window._updateDailyBadge(true);
       if (window._refreshScoreboard) window._refreshScoreboard();
-      triggerDailySolvedUI(data.reward > 0 ? `+${data.reward}€` : '');
+      triggerDailySolvedUI(data.reward > 0 ? `+${data.reward}€` : '', data.stars);
     });
 }
 
@@ -254,7 +283,7 @@ function checkSolution(network) {
       document.getElementById('moneyAmount').textContent = player.money + '€';
       sessionStorage.setItem('player', JSON.stringify(player));
       if (window._refreshScoreboard) window._refreshScoreboard();
-      triggerSolvedUI(`Reward: ${data.reward}€`);
+      triggerSolvedUI(`Reward: ${data.reward}€`, data.stars);
     });
 }
 
@@ -273,6 +302,30 @@ function checkSolutionGuest(network, player) {
     if (!node) continue;
     redispatchCost += adj > 0 ? adj * node.cost_increase : -adj * node.cost_decrease;
   }
+  const stars = starsForRedispatchCost(redispatchCost);
+
+  if (window._dailyMode) {
+    const today = new Date().toISOString().slice(0, 10);
+    const prevStars = player.daily_solved_date === today ? (player.daily_stars || 0) : 0;
+    const bestStars = Math.max(prevStars, stars);
+    player.daily_solved_date = today;
+    player.daily_stars = bestStars;
+
+    sessionStorage.setItem('player', JSON.stringify(player));
+    setGuestProgress({
+      current_level: player.current_level,
+      unlocked_levels: player.unlocked_levels,
+      money: player.money,
+      level_stars: player.level_stars ?? {},
+      daily_solved_date: player.daily_solved_date,
+      daily_stars: player.daily_stars,
+    });
+
+    if (window._updateDailyBadge) window._updateDailyBadge(true);
+    if (window._refreshScoreboard) window._refreshScoreboard();
+    triggerDailySolvedUI('', bestStars);
+    return;
+  }
 
   let reward = 0;
   if (player.current_level >= player.unlocked_levels) {
@@ -281,16 +334,24 @@ function checkSolutionGuest(network, player) {
   }
   player.money = (player.money ?? 100) + reward - Math.round(redispatchCost);
 
+  const levelStars = player.level_stars ?? {};
+  const bestStars = Math.max(levelStars[network.level] || 0, stars);
+  levelStars[network.level] = bestStars;
+  player.level_stars = levelStars;
+
   sessionStorage.setItem('player', JSON.stringify(player));
   setGuestProgress({
     current_level: player.current_level,
     unlocked_levels: player.unlocked_levels,
     money: player.money,
+    level_stars: levelStars,
+    daily_solved_date: player.daily_solved_date,
+    daily_stars: player.daily_stars,
   });
 
   document.getElementById('moneyAmount').textContent = player.money + '€';
   if (window._refreshScoreboard) window._refreshScoreboard();
-  triggerSolvedUI(reward > 0 ? `Reward: ${reward}€` : '');
+  triggerSolvedUI(reward > 0 ? `Reward: ${reward}€` : '', bestStars);
 }
 
 

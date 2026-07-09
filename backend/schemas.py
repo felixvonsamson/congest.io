@@ -33,6 +33,7 @@ class NetworkState(BaseModel):
     }
     level: Optional[int] = None
     tutorial_info: Optional[str] = None
+    difficulty: Optional[str] = None
 
     def __lt__(self, other):
         return self.cost < other.cost
@@ -72,10 +73,11 @@ def update_network_from_file(file_path: str) -> NetworkState:
     }
     level = None if "Level" not in file_path else int(file_path.split("Level")[-1].split(".")[0])
     return NetworkState(
-        nodes=nodes, 
+        nodes=nodes,
         lines=lines,
-        level=level, 
-        tutorial_info=data.get("tutorial_info", None)
+        level=level,
+        tutorial_info=data.get("tutorial_info", None),
+        difficulty=data.get("difficulty", None),
         )
 
 def dict_to_network_state(data: dict) -> NetworkState:
@@ -88,12 +90,13 @@ def dict_to_network_state(data: dict) -> NetworkState:
         for line_id, line_data in data.get("lines", {}).items()
     }
     return NetworkState(
-        nodes=nodes, 
-        lines=lines, 
-        cost=data.get("cost", 10**6), 
-        redispatch=data.get("redispatch", {"cost": 0.0, "unbalance": 0.0, "adjustments": {}}), 
-        level=data.get("level", None), 
-        tutorial_info=data.get("tutorial_info", None)
+        nodes=nodes,
+        lines=lines,
+        cost=data.get("cost", 10**6),
+        redispatch=data.get("redispatch", {"cost": 0.0, "unbalance": 0.0, "adjustments": {}}),
+        level=data.get("level", None),
+        tutorial_info=data.get("tutorial_info", None),
+        difficulty=data.get("difficulty", None),
         )
 
 class RegisterRequest(BaseModel):
@@ -112,6 +115,8 @@ class rewardResponse(BaseModel):
     solved: bool
     player: dict
     reward: int
+    redispatch_cost: float = 0.0
+    stars: Optional[int] = None
 
 class DailyProblemResponse(BaseModel):
     network: dict

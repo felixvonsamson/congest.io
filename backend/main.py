@@ -17,6 +17,8 @@ from .network import (
     reset_all_switches,
     validate_network,
     get_or_create_daily_network,
+    calculate_redispatch_cost,
+    stars_for_redispatch_cost,
 )
 from .schemas import (
     ProgressUpdateRequest,
@@ -54,6 +56,8 @@ with engine.connect() as _conn:
         ("daily_solved_date", "ALTER TABLE players ADD COLUMN daily_solved_date VARCHAR DEFAULT NULL"),
         ("daily_solved_count", "ALTER TABLE players ADD COLUMN daily_solved_count INTEGER DEFAULT 0"),
         ("daily_streak",       "ALTER TABLE players ADD COLUMN daily_streak INTEGER DEFAULT 0"),
+        ("daily_stars",        "ALTER TABLE players ADD COLUMN daily_stars INTEGER DEFAULT 0"),
+        ("level_stars",        "ALTER TABLE players ADD COLUMN level_stars VARCHAR DEFAULT '{}'"),
     ]:
         try:
             _conn.execute(_text(_ddl))
@@ -214,26 +218,30 @@ def check_solution(
         abs(line.flow) <= line.limit for line in network.lines.values()
     )
 
-    redispatch_cost = 0
-    for node_id, adjustement in network.redispatch["adjustments"].items():
-        if adjustement > 0:
-            redispatch_cost += adjustement * network.nodes[node_id].cost_increase
-        else:
-            redispatch_cost += -adjustement * network.nodes[node_id].cost_decrease
+    redispatch_cost = calculate_redispatch_cost(network)
 
     reward = 0
+    stars = None
     # If the player completed a new level, unlock the next level
     if all_lines_within_capacity:
         if player.unlocked_levels == player.current_level:
             player.unlocked_levels += 1
             reward = 50  # Reward for completing the level
         player.money += reward - redispatch_cost
+
+        level_stars = player.get_level_stars()
+        stars = max(level_stars.get(network.level, 0), stars_for_redispatch_cost(redispatch_cost))
+        level_stars[network.level] = stars
+        player.set_level_stars(level_stars)
+
         db.commit()
 
     return rewardResponse(
         solved=all_lines_within_capacity,
-        player=player.package_data(), 
-        reward=reward
+        player=player.package_data(),
+        reward=reward,
+        redispatch_cost=redispatch_cost,
+        stars=stars,
     )
 
 
@@ -338,19 +346,34 @@ def check_daily_solution(
 
     today = datetime.date.today().isoformat()
     reward = 0
-    if all_lines_ok and player.daily_solved_date != today:
-        yesterday = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
-        if player.daily_solved_date == yesterday:
-            player.daily_streak = (player.daily_streak or 0) + 1
-        else:
-            player.daily_streak = 1
-        player.daily_solved_date = today
-        player.daily_solved_count = (player.daily_solved_count or 0) + 1
-        reward = 50
-        player.money += reward
+    redispatch_cost = 0.0
+    stars = None
+    if all_lines_ok:
+        redispatch_cost = calculate_redispatch_cost(network)
+        prev_stars = player.daily_stars or 0 if player.daily_solved_date == today else 0
+        stars = max(prev_stars, stars_for_redispatch_cost(redispatch_cost))
+        player.daily_stars = stars
+
+        if player.daily_solved_date != today:
+            yesterday = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
+            if player.daily_solved_date == yesterday:
+                player.daily_streak = (player.daily_streak or 0) + 1
+            else:
+                player.daily_streak = 1
+            player.daily_solved_date = today
+            player.daily_solved_count = (player.daily_solved_count or 0) + 1
+            reward = 50
+            player.money += reward
+
         db.commit()
 
-    return rewardResponse(solved=all_lines_ok, player=player.package_data(), reward=reward)
+    return rewardResponse(
+        solved=all_lines_ok,
+        player=player.package_data(),
+        reward=reward,
+        redispatch_cost=redispatch_cost,
+        stars=stars,
+    )
 
 
 @router.get("/generated_network/count")

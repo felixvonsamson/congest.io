@@ -47,6 +47,9 @@ export async function ensureLoggedIn() {
         current_level: guestProgress.current_level ?? 1,
         unlocked_levels: guestProgress.unlocked_levels ?? 1,
         money: guestProgress.money ?? 100,
+        level_stars: guestProgress.level_stars ?? {},
+        daily_solved_date: guestProgress.daily_solved_date ?? null,
+        daily_stars: guestProgress.daily_stars ?? 0,
         is_guest: true,
       };
       sessionStorage.setItem('player', JSON.stringify(guestPlayer));

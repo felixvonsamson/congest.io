@@ -29,7 +29,14 @@ export function load_level(level) {
     loadGuestLevel(level).then(network => {
       player.current_level = level;
       sessionStorage.setItem('player', JSON.stringify(player));
-      setGuestProgress({ current_level: level, unlocked_levels: player.unlocked_levels, money: player.money });
+      setGuestProgress({
+        current_level: level,
+        unlocked_levels: player.unlocked_levels,
+        money: player.money,
+        level_stars: player.level_stars ?? {},
+        daily_solved_date: player.daily_solved_date ?? null,
+        daily_stars: player.daily_stars ?? 0,
+      });
       sessionStorage.setItem('network', JSON.stringify(network));
       updateNetwork(ctx, network, callbacks);
       fitCamera(network);

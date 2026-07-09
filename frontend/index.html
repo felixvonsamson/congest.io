@@ -20,6 +20,15 @@
   <!-- Minimap -->
   <div id="minimap"></div>
 
+  <!-- Top left: Difficulty badge -->
+  <div id="difficultyBadge" style="display:none;"
+       class="fixed top-3 left-3 z-[1000]
+              px-3 py-1.5 rounded-xl
+              bg-gray-900/90 backdrop-blur-md
+              border border-white/[0.08]
+              text-xs font-bold tracking-wide uppercase
+              shadow-lg shadow-black/50 select-none"></div>
+
   <!-- Top center: Level indicator -->
   <div id="LevelInfoPanel"
        class="fixed top-0 left-1/2 -translate-x-1/2 z-[1000]
@@ -161,6 +170,7 @@
                 bg-gray-900/95 backdrop-blur-md border border-emerald-500/30
                 shadow-lg shadow-black/50">
       <span class="text-emerald-400 text-sm font-semibold select-none">⚡ Solved!</span>
+      <div id="solvedPillStars"></div>
       <button id="nextLevelBtnPill"
               class="px-3 py-1.5 rounded-lg text-xs font-semibold
                      bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white
@@ -257,6 +267,7 @@
                   p-10 text-center w-[min(88vw,380px)]">
         <div class="text-6xl mb-4">⚡</div>
         <div id="solvedMessage" class="text-4xl font-extrabold text-white mb-2">Solved!</div>
+        <div id="solvedStars" class="mb-3"></div>
         <div id="rewardMessage" class="text-xl text-yellow-400 font-semibold mb-6"></div>
         <button id="nextLevelBtn" aria-label="Next level"
                 class="w-full py-3 rounded-xl text-base font-bold
@@ -281,6 +292,7 @@
                   p-10 text-center w-[min(88vw,380px)]">
         <div class="text-6xl mb-4">🌅</div>
         <div class="text-4xl font-extrabold text-white mb-2">Daily Solved!</div>
+        <div id="dailySolvedStars" class="mb-3"></div>
         <div id="dailyRewardMessage" class="text-xl text-yellow-400 font-semibold mb-2"></div>
         <div class="text-sm text-gray-400 mb-6">Come back tomorrow for a new challenge!</div>
         <button id="dailySolvedGotItBtn"
@@ -322,13 +334,14 @@
               <th class="px-5 py-3 text-left w-10">#</th>
               <th class="px-5 py-3 text-left cursor-pointer hover:text-white transition-colors" data-col="username">Player</th>
               <th class="px-5 py-3 text-right cursor-pointer hover:text-white transition-colors" data-col="unlocked_levels">🎮 Campaign</th>
+              <th class="px-5 py-3 text-right cursor-pointer hover:text-white transition-colors" data-col="total_stars">⭐ Stars</th>
               <th class="px-5 py-3 text-right cursor-pointer hover:text-white transition-colors" data-col="daily_streak">🔥 Streak</th>
               <th class="px-5 py-3 text-right cursor-pointer hover:text-white transition-colors" data-col="daily_solved_count">📅 Daily</th>
             </tr>
           </thead>
           <tbody id="leaderboardBody">
             <tr>
-              <td colspan="5" class="px-5 py-10 text-center text-gray-500">Loading…</td>
+              <td colspan="6" class="px-5 py-10 text-center text-gray-500">Loading…</td>
             </tr>
           </tbody>
         </table>
@@ -365,6 +378,7 @@
       document.getElementById('themeIconSun').style.display  = next === 'dark' ? '' : 'none';
       document.getElementById('themeIconMoon').style.display = next === 'light' ? '' : 'none';
       if (window._applyTheme) window._applyTheme(next);
+      document.dispatchEvent(new CustomEvent('themechange'));
     });
 
     document.getElementById('helpBtn').addEventListener('click', () => {

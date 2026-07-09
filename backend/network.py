@@ -51,6 +51,27 @@ COST_INCREASE_RANGE = (20, 100)
 COST_DECREASE_RANGE = (-20, 40)
 
 
+def calculate_redispatch_cost(network: NetworkState) -> float:
+    """Total cost of a submitted solution's redispatch adjustments."""
+    cost = 0.0
+    for node_id, adjustment in network.redispatch.get("adjustments", {}).items():
+        node = network.nodes[node_id]
+        if adjustment > 0:
+            cost += adjustment * node.cost_increase
+        else:
+            cost += -adjustment * node.cost_decrease
+    return cost
+
+
+def stars_for_redispatch_cost(cost: float) -> int:
+    """3 stars for a zero-redispatch solve, 2 under 100€, 1 otherwise."""
+    if cost <= 1e-6:
+        return 3
+    if cost < 100:
+        return 2
+    return 1
+
+
 def validate_network(network: NetworkState):
     """Raise ValueError if any line references a node that does not exist."""
     for line in network.lines.values():
@@ -110,8 +131,9 @@ def generate_network(
         network = _generate_once(num_nodes, width, height)
         if network is None:
             continue
-        solution = solve_network(deepcopy(network))
+        solution = solve_network(deepcopy(network), label_difficulty=True)
         if solution.cost == 0.0:
+            network.difficulty = solution.difficulty
             return network
         logger.warning(
             "generate_network: unsolvable level on attempt %d/%d "
@@ -546,7 +568,39 @@ def _get_node_switch_states(network, node_id):
             yield frozenset(candidate.lines.keys()), candidate
 
 
-def solve_network(network):
+def _count_switches(state):
+    """Number of line-endpoints moved to a bypass ('b') node — one per player move."""
+    switches = 0
+    for line in state.lines.values():
+        if line.from_node.endswith("b"):
+            switches += 1
+        if line.to_node.endswith("b"):
+            switches += 1
+    return switches
+
+
+def classify_difficulty(depth, switches):
+    """
+    Map a solution's depth (number of sequential switch decisions on the
+    path from the initial topology to the solution) and total switch count
+    to one of "Easy", "Medium", "Hard", "Very Hard".
+
+    Depth captures how many interdependent rounds of switching a player has
+    to chain together, which is what makes a level feel hard even when it
+    only takes a few total switches — so it's the primary signal, with
+    total switch count only used to split the depth-1 levels (a single
+    round can still bundle many independent switches).
+    """
+    if depth >= 4:
+        return "Very Hard"
+    if depth == 3:
+        return "Hard"
+    if depth == 2:
+        return "Medium"
+    return "Medium" if switches > 3 else "Easy"
+
+
+def solve_network(network, label_difficulty=False):
     """
     Find a solution that respects line limits by switching nodes.
 
@@ -557,15 +611,23 @@ def solve_network(network):
     bypass) is required to reach a low-cost solution.
 
     Cost is the sum of overloads (linear) across all lines.
+
+    If `label_difficulty` is True and a zero-cost solution is found, the
+    returned NetworkState's `difficulty` field is set via
+    classify_difficulty(), based on the depth of the switch sequence
+    actually needed to reach it (tracked via parent pointers) and its
+    total switch count. Behavior is otherwise unchanged.
     """
-    # line IDs encode topology; frozenset is sufficient for deduplication
-    visited_configs = set()
+    # line IDs encode topology; frozenset is sufficient for deduplication,
+    # and doubles as a lookup key for the parent pointer used to reconstruct
+    # solution depth when label_difficulty is requested.
+    visited_parent = {}
     best_so_far = calculate_power_flow(deepcopy(network))
     initial_config = frozenset(best_so_far.lines.keys())
-    visited_configs.add(initial_config)
+    visited_parent[initial_config] = None
 
     network_states = []
-    heapq.heappush(network_states, best_so_far)
+    heapq.heappush(network_states, (best_so_far, initial_config))
 
     deadline = time.time() + SOLVER_TIMEOUT_SECONDS
 
@@ -575,15 +637,111 @@ def solve_network(network):
         if time.time() > deadline:
             break
 
-        net = heapq.heappop(network_states)
+        net, net_config = heapq.heappop(network_states)
 
         if net.cost < best_so_far.cost:
             best_so_far = net
 
         if net.cost == 0.0:
+            if label_difficulty:
+                depth = 0
+                cur = net_config
+                while visited_parent[cur] is not None:
+                    depth += 1
+                    cur = visited_parent[cur]
+                net.difficulty = classify_difficulty(depth, _count_switches(net))
             return net
 
         # Expand by node: enumerate all switch combos per node, push every valid one
+        node_ids = [nid for nid in net.nodes if not nid.endswith("b")]
+        for node_id in node_ids:
+            for config, candidate in _get_node_switch_states(net, node_id):
+                if config in visited_parent:
+                    continue
+                new_state = calculate_power_flow(candidate)
+                if math.isnan(new_state.cost):
+                    continue
+                visited_parent[config] = net_config
+                heapq.heappush(network_states, (new_state, config))
+
+    return best_so_far
+
+
+def count_allowed_states(network):
+    """
+    Exact count of allowed topology states — states where every node has
+    enough connected lines to carry its injection (the same feasibility
+    check _get_node_switch_states uses to prune switch combinations) —
+    computed combinatorially instead of enumerated.
+
+    Each line contributes two independent switchable bits, one owned by
+    the node at each endpoint (switching a line at one end never affects
+    the other end's node). A node's feasibility depends only on its own
+    bits, so the total is the product, over all nodes, of the number of
+    ways that node can switch away a subset of its incident lines while
+    keeping enough of them connected.
+    """
+    total = 1
+    for node_id, node in network.nodes.items():
+        if node_id.endswith("b"):
+            continue
+        degree = sum(
+            1
+            for line in network.lines.values()
+            if line.from_node == node_id or line.to_node == node_id
+        )
+        min_lines_required = math.floor(abs(node.injection) / DEFAULT_LINE_LIMIT) + 1
+        max_switched_away = degree - min_lines_required
+        if max_switched_away < 0:
+            return 0
+        total *= sum(math.comb(degree, j) for j in range(max_switched_away + 1))
+    return total
+
+
+def evaluate_all_solutions(network):
+    """
+    Count allowed states (computed exactly via count_allowed_states) and
+    search for winning states (cost == 0.0) among them.
+
+    The allowed-state count is exact and doesn't depend on how much of
+    the space the search below actually covers — this matters because
+    some allowed states are only reachable by passing through an
+    intermediate disconnected topology, which the search (like
+    solve_network) deliberately doesn't expand through, so it can never
+    enumerate 100% of allowed states even given unlimited time.
+
+    The search itself expands lowest-cost states first (same best-first
+    order as solve_network) and, unlike solve_network, does not stop at
+    the first winning state — it keeps going to find as many as it can
+    within 3x the normal solver timeout (exhaustive counting is inherently
+    slower than best-first search for a single solution). Searching by
+    cost first means winning states tend to be found early, so a partial
+    search still gives a meaningful (if partial) winning-state count.
+
+    Returns (allowed_states, winning_states, exhaustive), where
+    `exhaustive` is False if the timeout was hit before the search
+    frontier was exhausted.
+    """
+    allowed_states = count_allowed_states(network)
+
+    visited_configs = set()
+    initial_state = calculate_power_flow(deepcopy(network))
+    initial_config = frozenset(initial_state.lines.keys())
+    visited_configs.add(initial_config)
+
+    winning_states = 1 if initial_state.cost == 0.0 else 0
+    frontier = [initial_state]
+
+    deadline = time.time() + 3 * SOLVER_TIMEOUT_SECONDS
+    exhaustive = True
+
+    while frontier:
+        if time.time() > deadline:
+            exhaustive = False
+            break
+
+        net = heapq.heappop(frontier)
+
         node_ids = [nid for nid in net.nodes if not nid.endswith("b")]
         for node_id in node_ids:
             for config, candidate in _get_node_switch_states(net, node_id):
@@ -593,9 +751,11 @@ def solve_network(network):
                 new_state = calculate_power_flow(candidate)
                 if math.isnan(new_state.cost):
                     continue
-                heapq.heappush(network_states, new_state)
+                if new_state.cost == 0.0:
+                    winning_states += 1
+                heapq.heappush(frontier, new_state)
 
-    return best_so_far
+    return allowed_states, winning_states, exhaustive
 
 
 def get_or_create_daily_network() -> NetworkState:

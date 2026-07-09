@@ -85,5 +85,6 @@
             "limit": 50.0
         }
     },
-    "cost": 0.0
+    "cost": 0.0,
+    "difficulty": "Easy"
 }

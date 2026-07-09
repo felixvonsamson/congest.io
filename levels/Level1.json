@@ -64,5 +64,6 @@
         }
     },
     "cost": 0.0,
-    "tutorial_info": "In this network you can see that the node in the north (49) is producing just under the maximal capacity of one line. Try to switch off one line in order to reroute all the power that goes from the west node (31) toward the south to avoid overloading the line."
+    "tutorial_info": "In this network you can see that the node in the north (49) is producing just under the maximal capacity of one line. Try to switch off one line in order to reroute all the power that goes from the west node (31) toward the south to avoid overloading the line.",
+    "difficulty": "Easy"
 }

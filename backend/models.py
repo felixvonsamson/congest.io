@@ -18,6 +18,23 @@ class Player(Base):
     daily_solved_date = Column(String, nullable=True, default=None)
     daily_solved_count = Column(Integer, default=0)
     daily_streak = Column(Integer, default=0)
+    # Best star rating (1-3) earned on the daily problem matching daily_solved_date
+    daily_stars = Column(Integer, default=0)
+
+    # JSON-serialized {level_num: stars} map of the best stars ever earned per level
+    level_stars = Column(String, default="{}")
+
+    def get_level_stars(self):
+        try:
+            return {int(k): v for k, v in json.loads(self.level_stars or "{}").items()}
+        except (ValueError, TypeError):
+            return {}
+
+    def set_level_stars(self, level_stars: dict):
+        self.level_stars = json.dumps(level_stars)
+
+    def total_stars(self):
+        return sum(self.get_level_stars().values())
 
     def package_data(self):
         return {
@@ -28,4 +45,7 @@ class Player(Base):
             "daily_solved_date": self.daily_solved_date,
             "daily_solved_count": self.daily_solved_count or 0,
             "daily_streak": self.daily_streak or 0,
+            "daily_stars": self.daily_stars or 0,
+            "level_stars": self.get_level_stars(),
+            "total_stars": self.total_stars(),
         }

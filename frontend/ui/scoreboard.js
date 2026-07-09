@@ -1,4 +1,4 @@
-const TOTAL_LEVELS = 37;
+const TOTAL_LEVELS = 100;
 
 let leaderboardData = [];
 let sortState = { col: 'daily_streak', dir: 'desc' };
@@ -33,6 +33,7 @@ function renderRows() {
     const rank = i + 1;
     const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : rank;
     const campaign = `${entry.unlocked_levels}/${TOTAL_LEVELS}`;
+    const stars = entry.total_stars > 0 ? entry.total_stars : '—';
     const streak = entry.daily_streak > 0 ? entry.daily_streak : '—';
     const daily = entry.daily_solved_count > 0 ? entry.daily_solved_count : '—';
 
@@ -44,6 +45,7 @@ function renderRows() {
         ${entry.username}${isMe ? ' <span class="text-xs text-blue-400 font-normal ml-1">(you)</span>' : ''}
       </td>
       <td class="px-5 py-3 text-right text-gray-300">${campaign}</td>
+      <td class="px-5 py-3 text-right text-amber-400">${stars}</td>
       <td class="px-5 py-3 text-right text-gray-300">${streak}</td>
       <td class="px-5 py-3 text-right text-gray-300">${daily}</td>
     `;
@@ -56,11 +58,11 @@ async function fetchAndRender() {
   const tbody = document.getElementById('leaderboardBody');
 
   if (player?.is_guest) {
-    tbody.innerHTML = '<tr><td colspan="5" class="px-5 py-10 text-center text-gray-500">Sign in to see the leaderboard.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="px-5 py-10 text-center text-gray-500">Sign in to see the leaderboard.</td></tr>';
     return;
   }
 
-  tbody.innerHTML = '<tr><td colspan="5" class="px-5 py-10 text-center text-gray-500">Loading…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="6" class="px-5 py-10 text-center text-gray-500">Loading…</td></tr>';
 
   try {
     const res = await fetch('/api/leaderboard', {
@@ -72,12 +74,12 @@ async function fetchAndRender() {
     if (!res.ok) throw new Error(res.status);
     leaderboardData = await res.json();
   } catch {
-    tbody.innerHTML = '<tr><td colspan="5" class="px-5 py-10 text-center text-red-400">Failed to load leaderboard.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="px-5 py-10 text-center text-red-400">Failed to load leaderboard.</td></tr>';
     return;
   }
 
   if (leaderboardData.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" class="px-5 py-10 text-center text-gray-500">No players yet.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="px-5 py-10 text-center text-gray-500">No players yet.</td></tr>';
     return;
   }
 
