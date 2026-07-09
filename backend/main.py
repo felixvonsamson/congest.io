@@ -172,6 +172,18 @@ def save_progress(
 def get_me(player: Player = Depends(get_current_player)):
     return player.package_data()
 
+@router.delete("/delete_account")
+def delete_account(
+    player: Player = Depends(get_current_player),
+    db: Session = Depends(get_db),
+):
+    # App Store 5.1.1(v): account-creating apps must let users delete their
+    # account from within the app. The Player row is self-contained (no
+    # related tables), so a single delete fully erases the account.
+    db.delete(player)
+    db.commit()
+    return {"status": "ok"}
+
 @router.get("/leaderboard")
 def leaderboard(player: Player = Depends(get_current_player), db: Session = Depends(get_db)):
     players = db.query(Player).order_by(Player.daily_streak.desc(), Player.money.desc()).all()

@@ -1,0 +1,21 @@
+{
+  "venvPath": ".",
+  "venv": ".venv",
+  "pythonVersion": "3.13",
+  "typeCheckingMode": "standard",
+  "include": [
+    "backend",
+    "debug_forces.py",
+    "test_generator.py"
+  ],
+  "exclude": [
+    "**/__pycache__",
+    ".venv",
+    "frontend",
+    "saves",
+    "levels",
+    "generated_networks",
+    ".ipynb_checkpoints",
+    "**/*.ipynb"
+  ]
+}
