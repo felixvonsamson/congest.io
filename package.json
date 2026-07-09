@@ -1,0 +1,11 @@
+{
+  "name": "congest-io",
+  "private": true,
+  "description": "Tooling scripts for the congest.io backend (Python type-checking, etc.)",
+  "scripts": {
+    "typecheck": "pyright"
+  },
+  "devDependencies": {
+    "pyright": "^1.1.411"
+  }
+}
