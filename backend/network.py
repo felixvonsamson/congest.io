@@ -39,9 +39,6 @@ HIGH_DEGREE_NODE_FACTOR = 0.1
 # Capacity limit assigned to every line (MW).
 DEFAULT_LINE_LIMIT = 50.0
 
-# Maximum solver iterations before giving up and returning best found so far.
-MAX_SOLVER_ITERATIONS = 250
-
 # Hard wall-clock timeout for the solver (seconds).
 SOLVER_TIMEOUT_SECONDS = 10
 
@@ -88,7 +85,12 @@ def is_connected(network: NetworkState) -> bool:
     return len(visited) == len(network.nodes)
 
 
-def generate_network(num_nodes: int = 12, width: float = 500.0, height: float = 500.0, seed: int | None = None):
+def generate_network(
+    num_nodes: int = 12,
+    width: float = 500.0,
+    height: float = 500.0,
+    seed: int | None = None,
+):
     """
     Generate a planar graph with nodes positioned in 2D space.
     Each node will have at least degree 3. Edges are created using
@@ -114,8 +116,11 @@ def generate_network(num_nodes: int = 12, width: float = 500.0, height: float = 
         logger.warning(
             "generate_network: unsolvable level on attempt %d/%d "
             "(nodes=%d, lines=%d, cost=%.2f) — retrying",
-            attempt + 1, MAX_GENERATION_RETRIES,
-            len(network.nodes), len(network.lines), solution.cost,
+            attempt + 1,
+            MAX_GENERATION_RETRIES,
+            len(network.nodes),
+            len(network.lines),
+            solution.cost,
         )
 
     raise RuntimeError(
@@ -220,7 +225,11 @@ def _generate_once(num_nodes: int, width: float, height: float):
     return state
 
 
-def reduce_edges(network, factor=EDGE_REDUCTION_FACTOR, high_degree_node_factor=HIGH_DEGREE_NODE_FACTOR):
+def reduce_edges(
+    network,
+    factor=EDGE_REDUCTION_FACTOR,
+    high_degree_node_factor=HIGH_DEGREE_NODE_FACTOR,
+):
     """
     Reduces the number of edges in the network while maintaining connectivity.
     Edges belonging to the top HIGH_DEGREE_NODE_FACTOR fraction of nodes are
@@ -235,7 +244,10 @@ def reduce_edges(network, factor=EDGE_REDUCTION_FACTOR, high_degree_node_factor=
 
     sorted_node_degree = sorted(node_degree.items(), key=lambda x: x[1], reverse=True)
     high_degree_nodes = {
-        nid for nid, _ in sorted_node_degree[: math.floor(len(nodes) * high_degree_node_factor)]
+        nid
+        for nid, _ in sorted_node_degree[
+            : math.floor(len(nodes) * high_degree_node_factor)
+        ]
     }
 
     target_num_edges = math.floor(len(lines) * factor)
@@ -375,7 +387,9 @@ def calculate_power_flow(network):
 
     # BFS connectivity check — cheaper than matrix rank
     if not is_connected(network):
-        return NetworkState(nodes=nodes, lines=lines, cost=float("nan"), level=network.level)
+        return NetworkState(
+            nodes=nodes, lines=lines, cost=float("nan"), level=network.level
+        )
 
     B = A @ A.T
 
@@ -489,7 +503,8 @@ def _get_node_switch_states(network, node_id):
     Yields (config_frozenset, new_network) for each combination.
     """
     incident_lines = [
-        line for line in network.lines.values()
+        line
+        for line in network.lines.values()
         if (line.from_node == node_id and not line.from_node.endswith("b"))
         or (line.to_node == node_id and not line.to_node.endswith("b"))
     ]
@@ -504,9 +519,18 @@ def _get_node_switch_states(network, node_id):
         if line.from_node == node_id and not line.from_node.endswith("b"):
             switchable.append((line.id, "from"))
 
+    # A node can only carry its injection if enough lines remain connected to
+    # it: each line can carry at most DEFAULT_LINE_LIMIT, so any config that
+    # switches away too many lines is mathematically infeasible regardless of
+    # topology and can be pruned before it's even built.
+    min_lines_required = abs(network.nodes[node_id].injection) / DEFAULT_LINE_LIMIT
+
     # Enumerate all non-empty subsets of switches to toggle
     num = len(switchable)
     for mask in range(1, 1 << num):
+        remaining = num - bin(mask).count("1")
+        if remaining <= min_lines_required:
+            continue
         candidate = deepcopy(network)
         for bit in range(num):
             if mask & (1 << bit):
@@ -545,7 +569,7 @@ def solve_network(network):
 
     deadline = time.time() + SOLVER_TIMEOUT_SECONDS
 
-    for iteration in range(MAX_SOLVER_ITERATIONS):
+    while True:
         if not network_states:
             break
         if time.time() > deadline:
@@ -559,10 +583,9 @@ def solve_network(network):
         if net.cost == 0.0:
             return net
 
-        # Expand by node: enumerate all switch combos per node, push best per node
+        # Expand by node: enumerate all switch combos per node, push every valid one
         node_ids = [nid for nid in net.nodes if not nid.endswith("b")]
         for node_id in node_ids:
-            best_for_node = None
             for config, candidate in _get_node_switch_states(net, node_id):
                 if config in visited_configs:
                     continue
@@ -570,10 +593,7 @@ def solve_network(network):
                 new_state = calculate_power_flow(candidate)
                 if math.isnan(new_state.cost):
                     continue
-                if best_for_node is None or new_state.cost < best_for_node.cost:
-                    best_for_node = new_state
-            if best_for_node is not None:
-                heapq.heappush(network_states, best_for_node)
+                heapq.heappush(network_states, new_state)
 
     return best_so_far
 

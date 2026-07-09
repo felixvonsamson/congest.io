@@ -6,8 +6,7 @@
 - `EDGE_REDUCTION_FACTOR = 0.85` — fraction of Delaunay edges kept after pruning
 - `HIGH_DEGREE_NODE_FACTOR = 0.1` — fraction of highest-degree nodes whose edges are never pruned
 - `DEFAULT_LINE_LIMIT = 50.0` — line capacity (MW), uniform for now (varied limits deferred)
-- `MAX_SOLVER_ITERATIONS = 250`
-- `SOLVER_TIMEOUT_SECONDS = 30`
+- `SOLVER_TIMEOUT_SECONDS = 10`
 - `MAX_GENERATION_RETRIES = 10`
 
 ## Generator
