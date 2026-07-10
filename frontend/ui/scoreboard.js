@@ -32,7 +32,8 @@ function renderRows() {
     const isMe = entry.username === player?.username;
     const rank = i + 1;
     const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : rank;
-    const campaign = `${entry.unlocked_levels}/${TOTAL_LEVELS}`;
+    const solvedLevels = entry.unlocked_levels - 1; // unlocked = solved + 1
+    const campaign = `${solvedLevels}/${TOTAL_LEVELS}`;
     const stars = entry.total_stars > 0 ? entry.total_stars : '—';
     const streak = entry.daily_streak > 0 ? entry.daily_streak : '—';
     const daily = entry.daily_solved_count > 0 ? entry.daily_solved_count : '—';
